@@ -7,7 +7,12 @@ import httplib
 import sys, time
 import traceback
 from socket import *
-from Tkinter import  *
+gui=True
+try:
+    from Tkinter import  *
+except:
+    gui=False
+    import argparse
 
 class WifiSwitch:
 
@@ -17,10 +22,10 @@ class WifiSwitch:
     def get_wifi_config(self):
         try:
             url = "http://" + self.ip + "/config?command=wifi"
-            tConfig.delete(1.0, END)
+            gui.tConfig.delete(1.0, END)
             self.status ("Sending request to %s" % url)    
             f = urllib2.urlopen(url, None ,5)
-            tConfig.insert(END, f.read())
+            gui.tConfig.insert(END, f.read())
             self.status ("Data sent")
         except:
             self.status(traceback.format_exc(), True)
@@ -28,7 +33,7 @@ class WifiSwitch:
     def set_wifi_config(self):
         try:
             url = "http://" + self.ip + "/config?command=wifi"
-            data = tConfig.get(1.0, END)
+            data = gui.tConfig.get(1.0, END)
             self.status ("Sending %s to %s" % (data, url))    
             f = urllib2.urlopen(url, data ,5)
             self.status ( f.read())
@@ -58,10 +63,11 @@ class WifiSwitch:
         self.switch(0)
 
     def discover(self):
-        MYPORT = 1025
+        PORT = 1025
 
-        lDevices.delete(0, END)
-        lDevices.update()
+        if (gui):
+            gui.lDevices.delete(0, END)
+            gui.lDevices.update()
         s = socket(AF_INET, SOCK_DGRAM)
         s.bind(('', 0))
         s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
@@ -69,7 +75,7 @@ class WifiSwitch:
         data = "Are You Espressif IOT Smart Device?"
         start = time.time()
         self.status("Discovery started at %f" % start)
-        s.sendto(data, ('<broadcast>', MYPORT))
+        s.sendto(data, ('<broadcast>', PORT))
 
         TIMEOUT=2
         t = time.time()
@@ -79,8 +85,11 @@ class WifiSwitch:
                 resp = s.recv(80)
                 end = time.time()
                 self.status ("response in %f" % (end - start))
-                lDevices.insert(END, resp)
-                lDevices.update()
+                if (gui):
+                    gui.lDevices.insert(END, resp)
+                    gui.lDevices.update()
+                else:
+                    print(resp)
             except timeout:
                 pass
         self.status ("Done")
@@ -89,64 +98,92 @@ class WifiSwitch:
         self.ip = address
 
     def status(self, s, error=False):
-        if (error):
-            tStatus.insert(END, "ERROR:" + s + "\r\n", "error")
+        if (gui):
+            if (error):
+                gui.tStatus.insert(END, "ERROR:" + s + "\r\n", "error")
+            else:
+                gui.tStatus.insert(END, s + "\r\n")
+            gui.tStatus.update()
         else:
-            tStatus.insert(END, s + "\r\n")
-        tStatus.update()
+            if (error):
+                print("ERROR:" + s )
+            else:
+                print("STATUS:" + s)
 
-switch = WifiSwitch()
 
-# Create the UI
-NUM_COLS=8
-row=0
-top = Tk()
+class Gui(object):
+    pass
 
-title = Label(top, text="ESP8266 IoT test app")
-title.grid(row=row, column=0,columnspan=NUM_COLS)
-row=row+1
+def create_gui(switch):
+    # Create the UI
+    gui = Gui()
+    NUM_COLS=8
+    row=0
+    top = Tk()
 
-bDiscover=Button(top, text="Discover Devices", command=switch.discover).grid(row=row, column=0, sticky=NSEW)
-fDevices=Frame(top)
-sDevices = Scrollbar(fDevices)
-sDevices.pack(side=RIGHT, fill=Y)
-lDevices = Listbox(fDevices, height=4, width=40, yscrollcommand=sDevices.set)
-sDevices.config(command=lDevices.yview)
-lDevices.pack(fill=BOTH)
-fDevices.grid(row=row, column=1, columnspan=7, sticky=EW)
-row=row+1
+    title = Label(top, text="ESP8266 IoT test app")
+    title.grid(row=row, column=0,columnspan=NUM_COLS)
+    row=row+1
 
-Button(top, text="Set IP", command=lambda: switch.set_ip(eIp.get())).grid(row=row, column=0, sticky=NSEW)
-eIp = Entry(top)
-eIp.insert(0, switch.ip)
-eIp.grid(row=row, column=1, columnspan=7, sticky=EW)
-row=row+1
+    bDiscover=Button(top, text="Discover Devices", command=switch.discover).grid(row=row, column=0, sticky=NSEW)
+    fDevices=Frame(top)
+    sDevices = Scrollbar(fDevices)
+    sDevices.pack(side=RIGHT, fill=Y)
+    gui.lDevices = Listbox(fDevices, height=4, width=40, yscrollcommand=sDevices.set)
+    sDevices.config(command=gui.lDevices.yview)
+    gui.lDevices.pack(fill=BOTH)
+    fDevices.grid(row=row, column=1, columnspan=7, sticky=EW)
+    row=row+1
 
-fConfig=Frame(top)
-sConfig=Scrollbar(fConfig)
-tConfig = Text(top, height=10)
-tConfig.grid(row=row, column=1, columnspan=7, rowspan=2, sticky=EW)
-Button(top, text="Read wifi config", command=switch.get_wifi_config).grid(row=row, column=0, sticky=NSEW)
-Button(top, text="Set wifi config", command=switch.set_wifi_config).grid(row=row+1, column=0, sticky=NSEW)
-row=row+2
+    Button(top, text="Set IP", command=lambda: switch.set_ip(eIp.get())).grid(row=row, column=0, sticky=NSEW)
+    eIp = Entry(top)
+    eIp.insert(0, switch.ip)
+    eIp.grid(row=row, column=1, columnspan=7, sticky=EW)
+    row=row+1
 
-bOn = Button(top, text="Switch On", command=switch.on)
-bOn.grid(row=row, column=0, columnspan=4, sticky=EW)
-bOff= Button(top, text="Switch Off", command=switch.off)
-bOff.grid(row=row, column=4, columnspan=4, sticky=EW)
-row=row+1
+    fConfig=Frame(top)
+    sConfig=Scrollbar(fConfig)
+    gui.tConfig = Text(top, height=10)
+    gui.tConfig.grid(row=row, column=1, columnspan=7, rowspan=2, sticky=EW)
+    Button(top, text="Read wifi config", command=switch.get_wifi_config).grid(row=row, column=0, sticky=NSEW)
+    Button(top, text="Set wifi config", command=switch.set_wifi_config).grid(row=row+1, column=0, sticky=NSEW)
+    row=row+2
 
-fStatus=Frame(top)
-sStatus = Scrollbar(fStatus)
-sStatus.pack(side=RIGHT, fill=Y)
-fStatus.grid(row=row, column=1, columnspan=7)
-tStatus=Text(fStatus, height=4, bg="grey", yscrollcommand=sStatus.set)
-sStatus.config(command=tStatus.yview)
-tStatus.pack()
-bClear = Button(top, text="Clear", command=lambda: tStatus.delete(1.0, END)).grid(row=row, column=0, sticky=NSEW)
-tStatus.tag_configure('error', foreground='red')
-row=row+1
+    bOn = Button(top, text="Switch On", command=switch.on)
+    bOn.grid(row=row, column=0, columnspan=4, sticky=EW)
+    bOff= Button(top, text="Switch Off", command=switch.off)
+    bOff.grid(row=row, column=4, columnspan=4, sticky=EW)
+    row=row+1
 
-top.mainloop()
+    fStatus=Frame(top)
+    sStatus = Scrollbar(fStatus)
+    sStatus.pack(side=RIGHT, fill=Y)
+    fStatus.grid(row=row, column=1, columnspan=7)
+    gui.tStatus=Text(fStatus, height=4, bg="grey", yscrollcommand=sStatus.set)
+    sStatus.config(command=gui.tStatus.yview)
+    gui.tStatus.pack()
+    bClear = Button(top, text="Clear", command=lambda: gui.tStatus.delete(1.0, END)).grid(row=row, column=0, sticky=NSEW)
+    gui.tStatus.tag_configure('error', foreground='red')
+    row=row+1
 
-# vim: ts=4 sw=4 expandtab
+    gui.top = top
+    return gui
+
+
+if __name__ == "__main__":
+    switch = WifiSwitch()
+    if (gui):
+        gui = create_gui(switch)
+        gui.top.mainloop()
+    else:
+        parser = argparse.ArgumentParser()
+        #group = parser.add_mutually_exclusive_group()
+        #group.add_argument("discover", help="discover devices on the network")
+        #group.add_argument("on", help="Turn switch on")
+        #group.add_argument("off", help="Turn switch off")
+        parser.add_argument("-c", nargs=1)
+        parser.parse_args()
+        print parser
+        switch.discover()
+
+# vim:ts=4:sw=4:expandtab:
