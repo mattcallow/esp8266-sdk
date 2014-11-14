@@ -1,3 +1,9 @@
 tags
 TAGS
 .output
+
+# Files build by the ESP SDK
+eagle.app.v6.dump
+eagle.app.v6.flash.bin
+eagle.app.v6.irom0text.bin
+eagle.app.v6.S
