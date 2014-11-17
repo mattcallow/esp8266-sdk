@@ -24,8 +24,10 @@ THE SOFTWARE.
 /*
 	Thingspeak demo
 */
-#include <ets_sys.h>
+#include <user_interface.h>
 #include <osapi.h>
+#include <c_types.h>
+#include <mem.h>
 #include <os_type.h>
 #include <gpio.h>
 #include "driver/uart.h"
@@ -37,7 +39,37 @@ LOCAL os_timer_t poll_timer;
 LOCAL void ICACHE_FLASH_ATTR
 poll_cb(void)
 {
-	os_printf("Hello World!\r\n");
+	uint8_t status = wifi_station_get_connect_status();
+	os_printf("wifi_station_get_connect_status returns %d\n", status);
+
+}
+
+LOCAL void ICACHE_FLASH_ATTR
+connect_to_network(void)
+{
+	struct station_config config;
+	bool ret;
+	os_printf("Connecting to network\n");
+    ETS_UART_INTR_DISABLE();
+	ret = wifi_set_opmode(STATION_MODE);
+	ETS_UART_INTR_ENABLE();
+	os_printf("wifi_set_opmode returns %d, opmode now %d\n", ret, wifi_get_opmode());
+	uint8_t status = wifi_station_get_connect_status();
+	os_printf("wifi_station_get_connect_status returns %d\n", status);
+	os_printf("disconnecting\n");
+	ret = wifi_station_disconnect();
+	os_printf("setting SSID to %s\n", WIFI_SSID);
+	os_strcpy(config.ssid, WIFI_SSID);
+	os_printf("setting password\n");
+	os_strcpy(config.password, WIFI_PASSWORD);
+	os_printf("setting config [%s] [%s]\n", config.ssid, config.password);
+    ETS_UART_INTR_DISABLE();
+	wifi_station_set_config(&config);
+	ETS_UART_INTR_ENABLE();
+	os_printf("connecting\n");
+	ret = wifi_station_connect();
+	os_printf("wifi_station_connect returns %d\n", ret);
+	
 }
 /*
  * This is entry point for user code
@@ -45,8 +77,11 @@ poll_cb(void)
 void user_init(void)
 {
 	// Configure the UART
-	uart_init(BIT_RATE_9600,BIT_RATE_9600);
+	uart_init(BIT_RATE_9600,0);
+	// enable system messages
+	system_set_os_print(1);
 
+	connect_to_network();
 	// Set up a timer to send the message
 	// os_timer_disarm(ETSTimer *ptimer)
     os_timer_disarm(&poll_timer);
