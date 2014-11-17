@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	The hello world demo
+	Thingspeak demo
 */
 #include <ets_sys.h>
 #include <osapi.h>
@@ -30,12 +30,12 @@ THE SOFTWARE.
 #include <gpio.h>
 #include "driver/uart.h"
 
-#define DELAY 500000 /* microseconds */
+#define DELAY 60000 /* milliseconds */
 
-LOCAL os_timer_t hello_timer;
+LOCAL os_timer_t poll_timer;
 
 LOCAL void ICACHE_FLASH_ATTR
-hello_cb(void)
+poll_cb(void)
 {
 	os_printf("Hello World!\r\n");
 }
@@ -49,11 +49,11 @@ void user_init(void)
 
 	// Set up a timer to send the message
 	// os_timer_disarm(ETSTimer *ptimer)
-    os_timer_disarm(&hello_timer);
+    os_timer_disarm(&poll_timer);
 	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
-	os_timer_setfn(&hello_timer, hello_cb, (void *)0);
+	os_timer_setfn(&poll_timer, poll_cb, (void *)0);
 	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
-	os_timer_arm(&hello_timer, 500, 1);
+	os_timer_arm(&poll_timer, DELAY, 1); 
 }
 
 // vim: ts=4 sw=4 

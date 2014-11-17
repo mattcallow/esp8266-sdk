@@ -22,44 +22,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	The blinky demo using an os timer
+	Print some system info
 */
 #include <ets_sys.h>
 #include <osapi.h>
 #include <os_type.h>
 #include <gpio.h>
+#include "driver/uart.h"
 
-// see eagle_soc.h for these definitions
-#define LED_GPIO 2
-#define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
-#define LED_GPIO_FUNC FUNC_GPIO2
+#define DELAY 1000 /* milliseconds */
 
-#define DELAY 500000 /* microseconds */
+extern void wdt_feed(void);
 
-LOCAL os_timer_t blink_timer;
+LOCAL os_timer_t info_timer;
 
-LOCAL uint8_t led_state=0;
 LOCAL void ICACHE_FLASH_ATTR
-blink_cb(void)
+info_cb(void *arg)
 {
-	GPIO_OUTPUT_SET(LED_GPIO, led_state);
-	led_state ^=1;
+	wdt_feed();
+	os_printf("Time=%ld\n", system_get_time());
+	os_printf("Chip id=%ld\n", system_get_chip_id());
+	os_printf("Free heap size=%ld\n", system_get_free_heap_size());
+	system_print_meminfo();
 }
+
 /*
  * This is entry point for user code
  */
 void user_init(void)
 {
-	// Configure pin as a GPIO
-	PIN_FUNC_SELECT(LED_GPIO_MUX, LED_GPIO_FUNC);
+	// Configure the UART
+	uart_init(BIT_RATE_9600,BIT_RATE_9600);
 
-	// Set up a timer to blink the LED
+	system_set_os_print(1); // TODO - do we need this?
+	// Set up a timer to send the message
 	// os_timer_disarm(ETSTimer *ptimer)
-    os_timer_disarm(&blink_timer);
+    os_timer_disarm(&info_timer);
 	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
-	os_timer_setfn(&blink_timer, blink_cb, (void *)0);
+	os_timer_setfn(&info_timer, (os_timer_func_t *)info_cb, (void *)0);
 	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
-	os_timer_arm(&blink_timer, 500, 1);
+	os_timer_arm(&info_timer, DELAY, 1);
 }
 
 // vim: ts=4 sw=4 

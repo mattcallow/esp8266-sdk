@@ -22,34 +22,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	The obligatory blinky demo
-	Blink an LED on GPIO pin 2
+	The hello world demo
 */
 #include <ets_sys.h>
 #include <osapi.h>
+#include <os_type.h>
 #include <gpio.h>
-
-// see eagle_soc.h for these definitions
-#define LED_GPIO 2
-#define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
-#define LED_GPIO_FUNC FUNC_GPIO2
+#include "driver/uart.h"
 
 #define DELAY 500000 /* microseconds */
 
+LOCAL os_timer_t hello_timer;
+
+LOCAL void ICACHE_FLASH_ATTR
+hello_cb(void *arg)
+{
+	uart0_sendStr("Hello World!\r\n");
+}
 /*
  * This is entry point for user code
  */
 void user_init(void)
 {
-	uint8_t state=0;
-	// Configure pin as a GPIO
-	PIN_FUNC_SELECT(LED_GPIO_MUX, LED_GPIO_FUNC);
-	for(;;)
-	{
-		GPIO_OUTPUT_SET(LED_GPIO, state);
-		os_delay_us(DELAY);
-		state ^=1;
-	}
+	// Configure the UART
+	uart_init(BIT_RATE_9600,BIT_RATE_9600);
+
+	// Set up a timer to send the message
+	// os_timer_disarm(ETSTimer *ptimer)
+    os_timer_disarm(&hello_timer);
+	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
+	os_timer_setfn(&hello_timer, (os_timer_func_t *)hello_cb, (void *)0);
+	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
+	os_timer_arm(&hello_timer, 500, 1);
 }
 
 // vim: ts=4 sw=4 
