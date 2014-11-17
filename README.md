@@ -1,5 +1,6 @@
-esp8266-sdk-apps
+esp8266-sdk
 ================
 
-Apps written using the esp8266 SDK from ExpressIf
-The SDK files are also included 
+Apps written using the esp8266 SDK from EspressIf
+The SDK files are also included. These are (c) EspressIf, and available from their forum
+http://bbs.espressif.com/
