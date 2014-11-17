@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include <gpio.h>
 #include "driver/uart.h"
 
-#define DELAY 500000 /* microseconds */
+#define DELAY 1000 /* milliseconds */
 
 LOCAL os_timer_t hello_timer;
 
@@ -38,6 +38,7 @@ LOCAL void ICACHE_FLASH_ATTR
 hello_cb(void *arg)
 {
 	uart0_sendStr("Hello World!\r\n");
+	os_printf("%ld\n", system_get_time());
 }
 /*
  * This is entry point for user code
@@ -53,7 +54,7 @@ void user_init(void)
 	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
 	os_timer_setfn(&hello_timer, (os_timer_func_t *)hello_cb, (void *)0);
 	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
-	os_timer_arm(&hello_timer, 500, 1);
+	os_timer_arm(&hello_timer, DELAY, 1);
 }
 
 // vim: ts=4 sw=4 

@@ -34,7 +34,9 @@ THE SOFTWARE.
 #define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
 #define LED_GPIO_FUNC FUNC_GPIO2
 
-#define DELAY 500000 /* microseconds */
+#define DELAY 500 /* milliseconds */
+
+extern void wdt_feed (void);
 
 LOCAL os_timer_t blink_timer;
 
@@ -44,6 +46,7 @@ blink_cb(void *arg)
 {
 	GPIO_OUTPUT_SET(LED_GPIO, led_state);
 	led_state ^=1;
+	wdt_feed();
 }
 /*
  * This is entry point for user code
@@ -59,7 +62,7 @@ void user_init(void)
 	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
 	os_timer_setfn(&blink_timer, (os_timer_func_t *)blink_cb, (void *)0);
 	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
-	os_timer_arm(&blink_timer, 500, 1);
+	os_timer_arm(&blink_timer, DELAY, 1);
 }
 
 // vim: ts=4 sw=4 
