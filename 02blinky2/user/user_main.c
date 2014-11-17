@@ -23,6 +23,7 @@ THE SOFTWARE.
 */
 /*
 	The blinky demo using an os timer
+	TODO : work out why this resets after a while
 */
 #include <ets_sys.h>
 #include <osapi.h>
@@ -34,7 +35,7 @@ THE SOFTWARE.
 #define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
 #define LED_GPIO_FUNC FUNC_GPIO2
 
-#define DELAY 500 /* milliseconds */
+#define DELAY 100 /* milliseconds */
 
 extern void wdt_feed (void);
 

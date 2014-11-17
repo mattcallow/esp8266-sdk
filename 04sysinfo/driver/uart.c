@@ -215,6 +215,23 @@ uart0_rx_intr_handler(void *para)
 //  }
 }
 
+LOCAL void ICACHE_FLASH_ATTR
+uart0_write_char(char c)
+{
+  if (c == '\n')
+  {
+    uart_tx_one_char(UART0, '\r');
+    uart_tx_one_char(UART0, '\n');
+  }
+  else if (c == '\r')
+  {
+  }
+  else
+  {
+    uart_tx_one_char(UART0, c);
+  }
+}
+
 /******************************************************************************
  * FunctionName : uart_init
  * Description  : user interface for init uart
@@ -228,12 +245,19 @@ uart_init(UartBautRate uart0_br, UartBautRate uart1_br)
   // rom use 74880 baut_rate, here reinitialize
   UartDev.baut_rate = uart0_br;
   uart_config(UART0);
-  UartDev.baut_rate = uart1_br;
-  uart_config(UART1);
+  if (uart1_br != 0)
+  {
+    UartDev.baut_rate = uart1_br;
+    uart_config(UART1);
+    // install uart1 putc callback
+    os_install_putc1((void *)uart1_write_char);
+  }
+  else
+  {
+    os_install_putc1((void *)uart0_write_char);
+  }
   ETS_UART_INTR_ENABLE();
 
-  // install uart1 putc callback
-  os_install_putc1((void *)uart1_write_char);
 }
 
 void ICACHE_FLASH_ATTR

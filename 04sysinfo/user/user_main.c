@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include <gpio.h>
 #include "driver/uart.h"
 
-#define DELAY 1000 /* milliseconds */
+#define DELAY 5000 /* milliseconds */
 
 extern void wdt_feed(void);
 
@@ -40,10 +40,13 @@ LOCAL void ICACHE_FLASH_ATTR
 info_cb(void *arg)
 {
 	wdt_feed();
-	os_printf("Time=%ld\n", system_get_time());
-	os_printf("Chip id=%ld\n", system_get_chip_id());
-	os_printf("Free heap size=%ld\n", system_get_free_heap_size());
+	uart0_sendStr("System Info\r\n");
+	os_printf("Time=%ld\r\n", system_get_time());
+	os_printf("Chip id=%ld\r\n", system_get_chip_id());
+	os_printf("Free heap size=%ld\r\n", system_get_free_heap_size());
+	uart0_sendStr("Mem info:\r\n");
 	system_print_meminfo();
+	uart0_sendStr("\r\n");
 }
 
 /*
@@ -52,12 +55,13 @@ info_cb(void *arg)
 void user_init(void)
 {
 	// Configure the UART
-	uart_init(BIT_RATE_9600,BIT_RATE_9600);
+	uart_init(BIT_RATE_9600,0);
 
-	system_set_os_print(1); // TODO - do we need this?
+	// enable some system messages
+	system_set_os_print(1); 
 	// Set up a timer to send the message
 	// os_timer_disarm(ETSTimer *ptimer)
-    os_timer_disarm(&info_timer);
+	os_timer_disarm(&info_timer);
 	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
 	os_timer_setfn(&info_timer, (os_timer_func_t *)info_cb, (void *)0);
 	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)

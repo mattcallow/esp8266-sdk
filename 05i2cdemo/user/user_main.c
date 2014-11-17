@@ -79,9 +79,7 @@ read_cb(void)
 void user_init(void)
 {
 	// Configure the UART
-	uart_init(BIT_RATE_9600,BIT_RATE_9600);
-
-	system_set_os_print(1); // TODO - do we need this?
+	uart_init(BIT_RATE_9600,0);
 
 	i2c_master_gpio_init();
 
