@@ -5,4 +5,6 @@
 #define WIFI_SSID "changeme"
 #define WIFI_PASSWORD "changeme"
 
+#define THINGSPEAK_API_KEY "changeme"
+// #define THINGSPEAK_TALKBACK_KEY "changeme"
 #endif
