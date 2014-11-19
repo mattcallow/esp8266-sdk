@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "driver/uart.h"
 
 
-#define DELAY 1000 /* milliseconds */
+#define DELAY 60000 /* milliseconds */
 
 #define DBG os_printf
 
@@ -45,6 +45,7 @@ LOCAL void ICACHE_FLASH_ATTR connect_to_network(void);
 
 static struct espconn nwconn;
 static esp_tcp conntcp;
+static struct ip_info ipconfig;
 
 LOCAL void ICACHE_FLASH_ATTR
 nw_close_cb(void * arg)
@@ -73,9 +74,28 @@ nw_recv_cb(void *arg, char *data, unsigned short len)
 {
     struct espconn *p_nwconn = (struct espconn *)arg;
 
-    DBG("nw_recv_cb len=%d\n", len);
+    DBG("nw_recv_cb len=%u\n", len);
 	// TODO - check the response
-
+	char *p=data;
+	int i;
+	for (i=0;i<len;i++)
+	{
+		if ((i % 16) == 0)
+		{
+			os_printf("\n0x");
+		}
+		os_printf("%02x(", *p);
+		if (*p >=32 && *p <=127)
+		{
+			os_printf("%c",*p);
+		}
+		else
+		{
+			os_printf(".");
+		}
+		os_printf(") ");
+	}
+	os_printf("\n");
 	// Start a timer to close the connection
     os_timer_disarm(&nw_close_timer);
 	os_timer_setfn(&nw_close_timer, nw_close_cb, arg);
@@ -93,17 +113,19 @@ nw_connect_cb(void *arg)
     struct espconn *p_nwconn = (struct espconn *)arg;
 	static char data[128];
 
+	uint32_t systime = system_get_time()/1000000;
     DBG("nw_connect_cb\n");
 
     espconn_regist_recvcb(p_nwconn, nw_recv_cb);
     espconn_regist_sentcb(p_nwconn, nw_sent_cb);
 	// construct a basic GET request and send it
 #ifdef THINKSPEAK_TALKBACK_KEY
-	os_sprintf(data, "GET /update?api_key=%s&talkback_key=%s&field1=%ld\r\n\r\n", THINGSPEAK_API_KEY, THINGSPEAK_TALKBACK_KEY, os_get_time());
+	os_sprintf(data, "GET /update?api_key=%s&talkback_key=%s&field1=%lu\r\n\r\n", THINGSPEAK_API_KEY, THINGSPEAK_TALKBACK_KEY, system_get_time());
 #else
-	os_sprintf(data, "GET /update?api_key=%s&field1=%ld\r\n\r\n", THINGSPEAK_API_KEY, os_get_time());
+	os_sprintf(data, "GET /update?key=%s&field1=%lu&status=my ip:%d.%d.%d.%d\r\n\r\n", THINGSPEAK_API_KEY, systime, IP2STR(&ipconfig.ip));
 #endif
 	DBG(data);
+	DBG("system_get_time() returns %lu\n", systime);
 	espconn_sent(p_nwconn, data, os_strlen(data));
 }
 
@@ -148,6 +170,7 @@ poll_cb(void * arg)
 		os_printf("Failed to connect to network! Will retry later\n");
 		return;
 	}
+    wifi_get_ip_info(STATION_IF, &ipconfig);
 	// start the connection process
 	// First set up the espconn structure
 	const char thingspeak_ip[4] = {184, 106, 153, 149};
