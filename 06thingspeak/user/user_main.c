@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include "driver/uart.h"
 
 
-#define DELAY 60000 /* milliseconds */
+#define DELAY 15000 /* milliseconds */
 
 #define DBG os_printf
 
@@ -75,7 +75,27 @@ nw_recv_cb(void *arg, char *data, unsigned short len)
     struct espconn *p_nwconn = (struct espconn *)arg;
 
     DBG("nw_recv_cb len=%u\n", len);
-	// TODO - check the response
+#ifdef THINGSPEAK_TALKBACK_KEY
+	switch (len)
+	{
+	case 3:
+		if (*data == 'O' && *(data+1) == 'F' && *(data+2) == 'F')
+		{
+			DBG("Switch Off");
+			GPIO_OUTPUT_SET(LED_GPIO, LED_OFF);
+		}
+		break;
+	case 2:
+		if (*data == 'O' && *(data+1) == 'N')
+		{
+			DBG("Switch On");
+			GPIO_OUTPUT_SET(LED_GPIO, LED_ON);
+		}
+		break;
+	default:
+		break;
+	}
+#else
 	char *p=data;
 	int i;
 	for (i=0;i<len;i++)
@@ -96,6 +116,7 @@ nw_recv_cb(void *arg, char *data, unsigned short len)
 		os_printf(") ");
 	}
 	os_printf("\n");
+#endif
 	// Start a timer to close the connection
     os_timer_disarm(&nw_close_timer);
 	os_timer_setfn(&nw_close_timer, nw_close_cb, arg);
@@ -119,8 +140,8 @@ nw_connect_cb(void *arg)
     espconn_regist_recvcb(p_nwconn, nw_recv_cb);
     espconn_regist_sentcb(p_nwconn, nw_sent_cb);
 	// construct a basic GET request and send it
-#ifdef THINKSPEAK_TALKBACK_KEY
-	os_sprintf(data, "GET /update?api_key=%s&talkback_key=%s&field1=%lu\r\n\r\n", THINGSPEAK_API_KEY, THINGSPEAK_TALKBACK_KEY, system_get_time());
+#ifdef THINGSPEAK_TALKBACK_KEY
+	os_sprintf(data, "GET /update?api_key=%s&talkback_key=%s&field1=%lu&status=my ip:%d.%d.%d.%d\r\n\r\n", THINGSPEAK_API_KEY, THINGSPEAK_TALKBACK_KEY, systime, IP2STR(&ipconfig.ip));
 #else
 	os_sprintf(data, "GET /update?key=%s&field1=%lu&status=my ip:%d.%d.%d.%d\r\n\r\n", THINGSPEAK_API_KEY, systime, IP2STR(&ipconfig.ip));
 #endif
@@ -221,17 +242,18 @@ void user_init(void)
 	uart_init(BIT_RATE_9600,0);
 	// enable system messages
 	system_set_os_print(1);
+#ifdef THINGSPEAK_TALKBACK_KEY
+	// Configure pin as a GPIO
+	PIN_FUNC_SELECT(LED_GPIO_MUX, LED_GPIO_FUNC);
+#endif
 
 	/*
 	 Don't try to connect the network here. It won't work!
 	 Needs to be done in a callback
 	*/
 	// Set up a timer to send the message
-	// os_timer_disarm(ETSTimer *ptimer)
     os_timer_disarm(&poll_timer);
-	// os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg)
 	os_timer_setfn(&poll_timer, poll_cb, (void *)0);
-	// void os_timer_arm(ETSTimer *ptimer,uint32_t milliseconds, bool repeat_flag)
 	os_timer_arm(&poll_timer, DELAY, 1); 
 }
 
