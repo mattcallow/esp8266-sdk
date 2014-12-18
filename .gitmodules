@@ -1,9 +1,6 @@
 [submodule "esp_iot_rtos_sdk_lib"]
 	path = esp_iot_rtos_sdk_lib
 	url = https://github.com/espressif/esp_iot_rtos_sdk_lib.git
-[submodule "esptool"]
-	path = esptool
-	url = https://github.com/themadinventor/esptool.git
 [submodule "esp_iot_rtos_sdk"]
 	path = esp_iot_rtos_sdk
 	url = https://github.com/espressif/esp_iot_rtos_sdk_lib.git
