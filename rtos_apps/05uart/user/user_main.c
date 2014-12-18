@@ -46,10 +46,14 @@ static volatile uint16_t bytes_rxed=0;
 void 
 read_task(void *pvParameters)
 {
-	DBG("In read_uart task\r\r");
 	for(;;)
 	{
-		os_putc(uart_getchar());
+		char c = uart_getchar();
+		if (c == '\r')
+		{
+			os_putc('\n');
+		}
+		os_putc(c);
 	}
 }
 
@@ -154,7 +158,7 @@ user_init(void)
 {
 	portBASE_TYPE ret;
 	// unsure what the default bit rate is, so set to a known value
-	uart_div_modify(UART0, UART_CLK_FREQ / (BIT_RATE_19200));
+	uart_div_modify(UART0, UART_CLK_FREQ / (BIT_RATE_9600));
 	printf("Start\r\n");
 	wifi_set_opmode(NULL_MODE);
 	uart_rx_init();
