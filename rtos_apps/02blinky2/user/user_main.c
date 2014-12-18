@@ -23,7 +23,7 @@ THE SOFTWARE.
 */
 /*
 	The obligatory blinky demo using FreeRTOS
-	Blink an LED on GPIO pin 2
+	Blink LEDs on GPIO pins 2 and 0
 */
 #include "esp_common.h"
 
@@ -31,9 +31,13 @@ THE SOFTWARE.
 #include "freertos/task.h"
 
 // see eagle_soc.h for these definitions
-#define LED_GPIO 2
-#define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
-#define LED_GPIO_FUNC FUNC_GPIO2
+#define LED1_GPIO 2
+#define LED1_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
+#define LED1_GPIO_FUNC FUNC_GPIO2
+
+#define LED2_GPIO 0
+#define LED2_GPIO_MUX PERIPHS_IO_MUX_GPIO0_U
+#define LED2_GPIO_FUNC FUNC_GPIO0
 
 // This was defined in the old SDK.
 #ifndef GPIO_OUTPUT_SET
@@ -44,14 +48,30 @@ THE SOFTWARE.
 /*
  * this task will blink an LED
  */
-void blinky(void *pvParameters)
+void blinky1(void *pvParameters)
 {
 	const portTickType xDelay = 500 / portTICK_RATE_MS;
 	static uint8_t state=0;
-	PIN_FUNC_SELECT(LED_GPIO_MUX, LED_GPIO_FUNC);
+	PIN_FUNC_SELECT(LED1_GPIO_MUX, LED1_GPIO_FUNC);
 	for(;;)
 	{
-		GPIO_OUTPUT_SET(LED_GPIO, state);
+		GPIO_OUTPUT_SET(LED1_GPIO, state);
+		state ^=1;
+		vTaskDelay( xDelay);
+	}
+}
+
+/*
+ * this task will blink an LED
+ */
+void blinky2(void *pvParameters)
+{
+	const portTickType xDelay = 250 / portTICK_RATE_MS;
+	static uint8_t state=0;
+	PIN_FUNC_SELECT(LED2_GPIO_MUX, LED2_GPIO_FUNC);
+	for(;;)
+	{
+		GPIO_OUTPUT_SET(LED2_GPIO, state);
 		state ^=1;
 		vTaskDelay( xDelay);
 	}
@@ -63,7 +83,8 @@ void blinky(void *pvParameters)
 void ICACHE_FLASH_ATTR
 user_init(void)
 {
-	xTaskCreate(blinky, "bl", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+	xTaskCreate(blinky1, "bl1", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
+	xTaskCreate(blinky2, "bl2", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 }
 
 
