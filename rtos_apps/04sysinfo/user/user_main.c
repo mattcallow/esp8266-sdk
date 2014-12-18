@@ -22,8 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	The obligatory blinky demo using FreeRTOS
-	Blink LEDs on GPIO pins 2 and 0
+	print some system information	
 */
 #include "esp_common.h"
 

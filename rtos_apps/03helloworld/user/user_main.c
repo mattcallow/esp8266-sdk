@@ -22,8 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	The obligatory blinky demo using FreeRTOS
-	Blink LEDs on GPIO pins 2 and 0
+	The obligatory hello world demo using FreeRTOS
 */
 #include "esp_common.h"
 
@@ -49,7 +48,7 @@ void helloworld(void *pvParameters)
 void ICACHE_FLASH_ATTR
 user_init(void)
 {
-	// unsure what the default bit rate is, so set to a knonw value
+	// unsure what the default bit rate is, so set to a known value
 	uart_div_modify(UART0, UART_CLK_FREQ / (BIT_RATE_9600));
 	xTaskCreate(helloworld, "hw", configMINIMAL_STACK_SIZE, NULL, 2, NULL);
 }
