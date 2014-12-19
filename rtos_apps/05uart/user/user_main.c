@@ -29,17 +29,10 @@ THE SOFTWARE.
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
 
-// if you get lots of rx_overruns, increase this (or read the data quicker!)
-#define UART_RX_QUEUE_SIZE 32
-
-xQueueHandle  uart_rx_queue;
-static volatile uint16_t rx_overruns=0;
-static volatile uint16_t bytes_rxed=0;
+#include "uart.h"
 
 #define DBG printf
-
 /*
  * this task will read the uart and echo back all characters entered
  */
@@ -65,91 +58,10 @@ status_task(void *pvParameters)
 {
 	for(;;)
 	{
-		printf("bytes_rxed=%d, rx_overruns=%d\r\n", bytes_rxed, rx_overruns);
+		printf("uart_rx_bytes=%d, uart_rx_overruns=%d\r\n", uart_rx_bytes, uart_rx_overruns);
 		vTaskDelay(10000 / portTICK_RATE_MS);
 	}
 }
-
-
-/*
- * UART rx Interrupt routine
- */
-void 
-uart_isr(void)
-{
-	uint8_t temp;
-	signed portBASE_TYPE ret;
-	portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
-	if (UART_RXFIFO_FULL_INT_ST != (READ_PERI_REG(UART_INT_ST(UART0)) & UART_RXFIFO_FULL_INT_ST))
-	{
-		return;
-	}
-	WRITE_PERI_REG(UART_INT_CLR(UART0), UART_RXFIFO_FULL_INT_CLR);
-
-    while (READ_PERI_REG(UART_STATUS(UART0)) & (UART_RXFIFO_CNT << UART_RXFIFO_CNT_S)) {
-		temp = READ_PERI_REG(UART_FIFO(UART0)) & 0xFF;
-		ret = xQueueSendToBackFromISR
-                    (
-                        uart_rx_queue,
-						&temp,
-                        &xHigherPriorityTaskWoken
-                    );
-		if (ret != pdTRUE)
-		{
-			rx_overruns++;
-		} 
-		else
-		{
-			bytes_rxed++;
-		}
-	}
-	portEND_SWITCHING_ISR( xHigherPriorityTaskWoken );
-}
-
-/*
- * Get a char from the RX buffer
- * return the char, or -1 on error
- * will block until data available
- */
-int ICACHE_FLASH_ATTR
-uart_getchar(void)
-{
-	unsigned char ch;
-	if ( xQueueReceive(uart_rx_queue, &ch, portMAX_DELAY) != pdTRUE)
-	{
-		return -1;
-	}
-	return (int)ch;
-}
-
-/* 
- * Return the number of characters available to read
- */
-int ICACHE_FLASH_ATTR
-uart_rx_available(void)
-{
-	return uxQueueMessagesWaiting(uart_rx_queue);
-}
-
-/*
- * Initialise the uart receiver
- */
-void ICACHE_FLASH_ATTR
-uart_rx_init()
-{ 
-	uart_rx_queue = xQueueCreate( 
-		UART_RX_QUEUE_SIZE,
-		sizeof(char)
-	);
-	DBG("Queue handle is %d\n", uart_rx_queue);
-	rx_overruns=0;
-	bytes_rxed=0;
-	/* _xt_isr_mask seems to cause Exception 20 ? */
-	//_xt_isr_mask(1<<ETS_UART_INUM);
-	_xt_isr_attach(ETS_UART_INUM, uart_isr);
-	_xt_isr_unmask(1<<ETS_UART_INUM);
-}
-
 /*
  * This is entry point for user code
  */

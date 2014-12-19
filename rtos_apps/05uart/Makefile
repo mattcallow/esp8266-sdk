@@ -61,6 +61,7 @@ COMPONENTS_eagle.app.v6 = \
 LINKFLAGS_eagle.app.v6 = \
 	-L$(SDK_DIR)/lib        \
 	-L$(SDK_LIB_DIR)/lib        \
+	-L$(EXTRA_LIB_DIR)/.output/lib        \
 	-nostdlib	\
     -T$(LD_FILE)   \
 	-Wl,--no-check-sections	\
@@ -77,6 +78,7 @@ LINKFLAGS_eagle.app.v6 = \
 	-lfreertos	\
 	-llwip	\
 	-ludhcp	\
+	-lextra \
 	$(DEP_LIBS_eagle.app.v6)					\
 	-Wl,--end-group
 

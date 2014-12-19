@@ -7,6 +7,7 @@ endif
 ROOT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SDK_DIR := $(ROOT_DIR)/../esp_iot_rtos_sdk
 SDK_LIB_DIR := $(ROOT_DIR)/../esp_iot_rtos_sdk_lib
+EXTRA_LIB_DIR := $(ROOT_DIR)/extra_lib
 
 AR = xt-ar
 CC = xt-xcc
@@ -176,5 +177,6 @@ $(foreach image,$(GEN_IMAGES),$(eval $(call MakeImage,$(basename $(image)))))
 INCLUDES := $(INCLUDES) -I $(PDIR)include -I $(PDIR)include/$(TARGET)
 INCLUDES += -I ./ -I $(SDK_DIR)/include -I $(SDK_DIR)/include/lwip -I $(SDK_DIR)/include/lwip/ipv4 -I $(SDK_DIR)/include/lwip/ipv6
 INCLUDES += -I $(SDK_DIR)/include/espressif
+INCLUDES += -I $(EXTRA_LIB_DIR)
 PDIR := ../$(PDIR)
 sinclude $(PDIR)Makefile
