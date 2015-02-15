@@ -8,8 +8,8 @@ rm ${BINDIR}/eagle.app.v6.flash.bin ${BINDIR}/eagle.app.v6.irom0text.bin ${BINDI
 
 cd .output/eagle/debug/image
 
-xt-objdump -x -s eagle.app.v6.out > ../../../../../bin/eagle.app.v6.dump
-xt-objdump -S eagle.app.v6.out > ../../../../../bin/eagle.app.v6.S
+xt-objdump -x -s eagle.app.v6.out > ${BINDIR}/eagle.app.v6.dump
+xt-objdump -S eagle.app.v6.out > ${BINDIR}/eagle.app.v6.S
 
 xt-objcopy --only-section .text -O binary eagle.app.v6.out eagle.app.v6.text.bin
 xt-objcopy --only-section .data -O binary eagle.app.v6.out eagle.app.v6.data.bin

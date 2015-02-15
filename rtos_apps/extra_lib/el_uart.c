@@ -1,4 +1,4 @@
-#include "uart.h"
+#include "el_uart.h"
 
 //#define DBG printf
 #define DBG (void)
@@ -73,18 +73,20 @@ uart_getchar_ms(int timeout)
 }
 
 
+/*
+ * Read at most len-1 chars from the UART
+ * last char will in buf will be a null
+ */
 char * ICACHE_FLASH_ATTR
 uart_gets(char *buf, int len)
 {
-	int i=1; // need to save one char for null
+	int i=0; 
 	char *p=buf;
 	int ch;
 	while (i<len)
 	{
 		ch = uart_getchar();
-		if (ch == -1) return NULL;
-		if (ch == 0x03) return NULL;
-		if (ch == '\r' || ch == '\n') 
+		if (ch == '\r' || ch == '\n' || ch == -1 || ch == 0x03)
 		{
 			*p='\0';
 			return buf;	

@@ -56,12 +56,12 @@ ifeq ($(APP), 2)
 endif
 
 COMPONENTS_eagle.app.v6 = \
-	user/libuser.a
+	user/libuser.a 
 
 LINKFLAGS_eagle.app.v6 = \
 	-L$(SDK_DIR)/lib        \
 	-L$(SDK_LIB_DIR)/lib        \
-	-L$(EXTRA_LIB_DIR)/.output/lib \
+	-L$(EXTRA_LIB_DIR)/.output/lib        \
 	-nostdlib	\
     -T$(LD_FILE)   \
 	-Wl,--no-check-sections	\
@@ -76,14 +76,15 @@ LINKFLAGS_eagle.app.v6 = \
 	-lwpa	\
 	-lmain	\
 	-lfreertos	\
-	-llwip \
+	-llwip	\
+	-ludhcp	\
 	-lextra \
 	$(DEP_LIBS_eagle.app.v6)					\
 	-Wl,--end-group
 
 DEPENDS_eagle.app.v6 = \
                 $(LD_FILE) \
-                $(LDDIR)/eagle.rom.addr.v6.ld
+                $(LDDIR)/eagle.rom.addr.v6.ld 
 
 #############################################################
 # Configuration i.e. compile options etc.

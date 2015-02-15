@@ -1,5 +1,5 @@
-#ifndef _UART_H_
-#define _UART_H_
+#ifndef _EL_UART_H_
+#define _EL_UART_H_
 
 #include "esp_common.h"
 #include "freertos/FreeRTOS.h"
@@ -11,6 +11,7 @@ extern volatile uint16_t uart_rx_bytes;
 
 int ICACHE_FLASH_ATTR uart_getchar_ms(int timeout);
 #define uart_getchar() uart_getchar_ms(-1)
+#define uart_rx_flush() xQueueReset(uart_rx_queue)
 int ICACHE_FLASH_ATTR uart_rx_available(void);
 void ICACHE_FLASH_ATTR uart_rx_init(void);
 void ICACHE_FLASH_ATTR uart_set_baud(int uart, int baud);
