@@ -70,8 +70,8 @@ static uint8_t wifi_status=0;
     gpio_output_set(bit_value<<gpio_no, ((~bit_value)&0x01)<<gpio_no, 1<<gpio_no,0)
 #endif
 
-#define LED_ON() GPIO_OUTPUT_SET(LED_GPIO, 0)
-#define LED_OFF() GPIO_OUTPUT_SET(LED_GPIO, 1)
+#define LED_ON() GPIO_OUTPUT_SET(LED_GPIO, 1)
+#define LED_OFF() GPIO_OUTPUT_SET(LED_GPIO, 0)
 
 #define TASK_DELAY_MS(m) vTaskDelay(m/portTICK_RATE_MS)
 #define PRIV_PARAM_START_SEC            0x3C
@@ -228,8 +228,14 @@ configure(void)
 			printf("Invalid choice\r\n");
 		}
 	} while (ch != '0');
-    wifi_set_opmode(STATION_MODE);
-	wifi_station_set_auto_connect(1);
+    ret=wifi_set_opmode(STATION_MODE);
+	TASK_DELAY_MS( 10 );
+	DBG("wifi_set_opmode returns %d op_mode now %d\r\n", ret, wifi_get_opmode());
+	ret=wifi_station_set_auto_connect(1);
+	TASK_DELAY_MS( 10 );
+	DBG("wifi_station_set_auto_connect returns %d station_get_auto_connect now %d\r\n", ret, wifi_station_get_auto_connect());
+	printf("System will now restart\r\n");
+	system_restart();
 }
 
 #define READ_BUTTON() ((GPIO_REG_READ(GPIO_IN_ADDRESS)  >> (GPIO_ID_PIN(BUTTON_GPIO))) & 0x01)
