@@ -1,7 +1,7 @@
 /*
 The MIT License (MIT)
 
-Copyright (c) 2014 Matt Callow
+Copyright (c) 2015 Matt Callow
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 /*
-	Gate control
+	Wifi button	
 	Run a command when a button is pressed
   
 */
@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 #include "lwip/sockets.h"
 #include "lwip/err.h"
@@ -38,7 +39,6 @@ THE SOFTWARE.
 #include "user_config.h"
 
 static struct ip_info ipconfig;
-static struct station_config st_config;
 
 #define GET_LEN 128
 #define HOST_LEN 80
@@ -51,6 +51,7 @@ typedef struct {
 
 static user_config_t user_config;
 static uint8_t wifi_status=0;
+static xSemaphoreHandle ledSemaphore;
 #define BUFSIZE 200
 #define DBG printf
 
@@ -112,10 +113,10 @@ uint8_t send_command()
 	int nbytes;
 	int sock;
 	int ret;
-	uint32_t systime = system_get_time()/1000000;
-
 	struct sockaddr_in local_ip;
 	struct sockaddr_in remote_ip;
+
+	printf("Sending data...\r\n");
 
 	sock = socket(PF_INET, SOCK_STREAM, 0);
 
@@ -173,18 +174,16 @@ uint8_t send_command()
 	}
 	DBG("Closing socket %d\n", sock);
 	close(sock);
+	return 0;
 }
 
 static ICACHE_FLASH_ATTR int
 configure(void)
 {
 	int ch;
-	int ret = wifi_station_set_auto_connect(0);
-	TASK_DELAY_MS( 10 );
-	DBG("wifi_station_set_auto_connect returns %d station_get_auto_connect now %d\r\n", ret, wifi_station_get_auto_connect());
-    ret = wifi_set_opmode(NULL_MODE);
-	TASK_DELAY_MS( 10 );
-	DBG("wifi_set_opmode returns %d op_mode now %d\r\n", ret, wifi_get_opmode());
+	int ret; 
+	static struct station_config st_config;
+	wifi_station_get_config(&st_config);
 	do
 	{
 		printf("\r\nConfiguration:\r\n");
@@ -192,31 +191,31 @@ configure(void)
 		printf("2: Wifi Password [%s]\r\n", st_config.password);
 		printf("3: HTTP host[%s]\r\n", user_config.host);
 		printf("4: HTTP port[%d]\r\n", user_config.port);
-		printf("5: HTTP path [%s]\r\n", user_config.get_cmd);
+		printf("5: HTTP path/query [%s]\r\n", user_config.get_cmd);
 		printf("0: Exit configuration\r\n");
 		ch = uart_getchar();
 		switch (ch)
 		{
 		case '1':
-			printf("Enter SSID: ");
+			printf("Enter Wifi SSID: ");
 			uart_gets(st_config.ssid, 32);
 			break;
 		case '2':
-			printf("Enter Password: ");
+			printf("Enter Wifi Password: ");
 			uart_gets(st_config.password, 64);
 			break;
 		case '3':
-			printf("Enter host: ");
+			printf("Enter HTTP host: ");
 			uart_gets(user_config.host, HOST_LEN+1);
 			break;
 		case '4':
-			printf("Enter port: ");
+			printf("Enter HTTP port: ");
 			char buf[6];
 			uart_gets(buf, 6);
 			user_config.port = atoi(buf);
 			break;
 		case '5':
-			printf("Enter GET path: ");
+			printf("Enter HTTP path and query string: ");
 			uart_gets(user_config.get_cmd, GET_LEN+1);
 			break;
 		case '0':
@@ -228,12 +227,6 @@ configure(void)
 			printf("Invalid choice\r\n");
 		}
 	} while (ch != '0');
-    ret=wifi_set_opmode(STATION_MODE);
-	TASK_DELAY_MS( 10 );
-	DBG("wifi_set_opmode returns %d op_mode now %d\r\n", ret, wifi_get_opmode());
-	ret=wifi_station_set_auto_connect(1);
-	TASK_DELAY_MS( 10 );
-	DBG("wifi_station_set_auto_connect returns %d station_get_auto_connect now %d\r\n", ret, wifi_station_get_auto_connect());
 	printf("System will now restart\r\n");
 	system_restart();
 }
@@ -252,8 +245,23 @@ void check_button(void *pvParameters)
 			TASK_DELAY_MS(10); // de-bounce
 			if (READ_BUTTON() == 0)
 			{
-				send_command();
-				while(READ_BUTTON() ==0); // wait for button release
+				int i, flashes=1;
+				xSemaphoreTake( ledSemaphore, 10);
+				LED_OFF();
+				if(send_command())
+				{
+					flashes=3;
+				}
+				// provide some user feedback
+				for(i=0;i<flashes;i++)
+				{
+					LED_ON();
+					TASK_DELAY_MS(100);
+					LED_OFF();
+					TASK_DELAY_MS(400);
+				}
+				xSemaphoreGive(ledSemaphore);
+				while(READ_BUTTON() == 0); // wait for button release
 			}
 		}
 	}
@@ -266,6 +274,7 @@ check_connection(void *pvParameters)
 	{
 		wifi_status = wifi_station_get_connect_status();
 		//DBG("wifi_station_get_connect_status returns %d\r\n", wifi_status);
+		xSemaphoreTake( ledSemaphore, portMAX_DELAY);
 		if (wifi_status == STATION_GOT_IP)
 		{
 			LED_ON();
@@ -274,6 +283,7 @@ check_connection(void *pvParameters)
 		{
 			LED_OFF();
 		}
+		xSemaphoreGive( ledSemaphore);
 		TASK_DELAY_MS(500);
 	}
 }
@@ -303,7 +313,10 @@ check_input(void *pvParameters)
 		case 'T':
 			if (wifi_status == STATION_GOT_IP) 
 			{
-					send_command();
+					if(send_command())
+					{
+						printf("Send command failed!\r\n");
+					}
 			}
 			else
 			{
@@ -336,12 +349,20 @@ user_init(void)
     GPIO_REG_WRITE(GPIO_PIN_ADDR(BUTTON_GPIO), 0x04);
     GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, 1 <<BUTTON_GPIO);
 
-	LED_OFF();
+	// flash the LED to show we are alive
+	int i;
+	for (i=0;i<10;i++)
+	{
+		LED_ON();
+		os_delay_us(50000u);
+		LED_OFF();
+		os_delay_us(50000u);
+	}
+	vSemaphoreCreateBinary(ledSemaphore);
 	// unsure what the default bit rate is, so set to a known value
 	uart_set_baud(UART0, BIT_RATE_9600);
 	uart_rx_init();
-	printf("Start\r\n");
-	wifi_station_get_config(&st_config);
+	printf("Wifi Button example program.  Copyright (c) 2015 Matt Callow\r\n");
 	if (!read_user_config(&user_config))
 	{
 		ret = wifi_set_opmode(STATION_MODE);
@@ -356,6 +377,5 @@ user_init(void)
 	xTaskCreate(check_input, "input", 256, NULL, 3, NULL);
 	xTaskCreate(check_connection, "check", 256, NULL, 4, NULL);
 }
-
 
 // vim: ts=4 sw=4 noexpandtab
