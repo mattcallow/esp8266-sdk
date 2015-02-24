@@ -8,6 +8,8 @@ ROOT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SDK_DIR := $(ROOT_DIR)/../esp_iot_rtos_sdk
 SDK_LIB_DIR := $(ROOT_DIR)/../esp_iot_rtos_sdk_lib
 EXTRA_LIB_DIR := $(ROOT_DIR)/extra_lib
+ESPTOOL := $(ROOT_DIR)/../esptool/esptool.py
+PORT := /dev/ttyUSB0
 
 AR = xt-ar
 CC = xt-xcc

@@ -270,10 +270,11 @@ void check_button(void *pvParameters)
 static ICACHE_FLASH_ATTR void
 check_connection(void *pvParameters)
 {
+	int count=0;
+	int state=0;
 	for(;;)
 	{
 		wifi_status = wifi_station_get_connect_status();
-		//DBG("wifi_station_get_connect_status returns %d\r\n", wifi_status);
 		xSemaphoreTake( ledSemaphore, portMAX_DELAY);
 		if (wifi_status == STATION_GOT_IP)
 		{
@@ -281,10 +282,24 @@ check_connection(void *pvParameters)
 		}
 		else
 		{
-			LED_OFF();
+			// flash the LED so we know it's searching 
+			if (state == 0)
+			{
+				LED_OFF();
+				if (++count == 10)
+				{
+					count=0;
+					state=1;
+				}
+			}
+			else
+			{
+				LED_ON();
+				state=0;
+			}
 		}
 		xSemaphoreGive( ledSemaphore);
-		TASK_DELAY_MS(500);
+		TASK_DELAY_MS(250);
 	}
 }
 
@@ -349,15 +364,6 @@ user_init(void)
     GPIO_REG_WRITE(GPIO_PIN_ADDR(BUTTON_GPIO), 0x04);
     GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, 1 <<BUTTON_GPIO);
 
-	// flash the LED to show we are alive
-	int i;
-	for (i=0;i<10;i++)
-	{
-		LED_ON();
-		os_delay_us(50000u);
-		LED_OFF();
-		os_delay_us(50000u);
-	}
 	vSemaphoreCreateBinary(ledSemaphore);
 	// unsure what the default bit rate is, so set to a known value
 	uart_set_baud(UART0, BIT_RATE_9600);
