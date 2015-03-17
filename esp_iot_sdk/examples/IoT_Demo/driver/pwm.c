@@ -309,7 +309,7 @@ pwm_init(uint16 freq, uint8 *duty)
     pwm_set_freq_duty(freq, duty);
 
     pwm_start();
-    
+
     ETS_FRC_TIMER1_INTR_ATTACH(pwm_tim1_intr_handler, NULL);
     TM1_EDGE_INT_ENABLE();
     ETS_FRC1_INTR_ENABLE();
