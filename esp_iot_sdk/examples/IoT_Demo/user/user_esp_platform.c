@@ -17,7 +17,8 @@
 
 #include "espconn.h"
 #include "user_esp_platform.h"
-#include "version.h"
+#include "user_iot_version.h"
+#include "upgrade.h"
 
 #if ESP_PLATFORM
 
@@ -29,7 +30,7 @@
 #define ESP_DBG
 #endif
 
-#define ACTIVE_FRAME    "{\"nonce\": %d,\"path\": \"/v1/device/activate/\", \"method\": \"POST\", \"body\": {\"encrypt_method\": \"PLAIN\", \"token\": \"%s\", \"bssid\": \""MACSTR"\"}, \"meta\": {\"Authorization\": \"token %s\"}}\n"
+#define ACTIVE_FRAME    "{\"nonce\": %d,\"path\": \"/v1/device/activate/\", \"method\": \"POST\", \"body\": {\"encrypt_method\": \"PLAIN\", \"token\": \"%s\", \"bssid\": \""MACSTR"\",\"rom_version\":\"%s\"}, \"meta\": {\"Authorization\": \"token %s\"}}\n"
 
 #if PLUG_DEVICE
 #include "user_plug.h"
@@ -87,6 +88,8 @@ LOCAL struct esp_platform_saved_param esp_param;
 LOCAL uint8 device_status;
 LOCAL uint8 device_recon_count = 0;
 LOCAL uint32 active_nonce = 0;
+LOCAL uint8 iot_version[20] = {0};
+struct rst_info rtc_info;
 void user_esp_platform_check_ip(uint8 reset_flag);
 
 /******************************************************************************
@@ -439,7 +442,8 @@ LOCAL void ICACHE_FLASH_ATTR
 user_esp_platform_discon_cb(void *arg)
 {
     struct espconn *pespconn = arg;
-
+    struct ip_info ipconfig;
+	struct dhcp_client_info dhcp_info;
     ESP_DBG("user_esp_platform_discon_cb\n");
 
 #if (PLUG_DEVICE || LIGHT_DEVICE)
@@ -460,6 +464,15 @@ user_esp_platform_discon_cb(void *arg)
 #ifdef SENSOR_DEEP_SLEEP
 
     if (wifi_get_opmode() == STATION_MODE) {
+    	/***add by tzx for saving ip_info to avoid dhcp_client start****/
+    	wifi_get_ip_info(STATION_IF, &ipconfig);
+
+    	dhcp_info.ip_addr = ipconfig.ip;
+    	dhcp_info.netmask = ipconfig.netmask;
+    	dhcp_info.gw = ipconfig.gw ;
+    	dhcp_info.flag = 0x01;
+    	os_printf("dhcp_info.ip_addr = %d\n",dhcp_info.ip_addr);
+    	system_rtc_mem_write(64,&dhcp_info,sizeof(struct dhcp_client_info));
         user_sensor_deep_sleep_enter();
     } else {
         os_timer_disarm(&client_timer);
@@ -542,7 +555,7 @@ user_esp_platform_sent(struct espconn *pespconn)
 
             wifi_get_macaddr(STATION_IF, bssid);
 
-            os_sprintf(pbuf, ACTIVE_FRAME, active_nonce, token, MAC2STR(bssid), devkey);
+            os_sprintf(pbuf, ACTIVE_FRAME, active_nonce, token, MAC2STR(bssid),iot_version, devkey);
         }
 
 #if SENSOR_DEVICE
@@ -579,7 +592,7 @@ user_esp_platform_sent(struct espconn *pespconn)
 
 #elif FLAMMABLE_GAS_SUB_DEVICE
         else {
-            uint32 adc_value = adc_read();
+            uint32 adc_value = system_adc_read();
 
             os_sprintf(pbuf, UPLOAD_FRAME, count, adc_value / 1024, adc_value * 1000 / 1024, devkey);
         }
@@ -724,13 +737,13 @@ user_esp_platform_upgrade_rsp(void *arg)
     char *action = NULL;
 
     os_memcpy(devkey, esp_param.devkey, 40);
+    pbuf = (char *)os_zalloc(packet_size);
 
     if (server->upgrade_flag == true) {
-        pbuf = (char *)os_zalloc(packet_size);
         ESP_DBG("user_esp_platform_upgarde_successfully\n");
         action = "device_upgrade_success";
         os_sprintf(pbuf, UPGRADE_FRAME, devkey, action, server->pre_version, server->upgrade_version);
-        ESP_DBG(pbuf);
+        ESP_DBG("%s", pbuf);
 
 #ifdef CLIENT_SSL_ENABLE
         espconn_secure_sent(pespconn, pbuf, os_strlen(pbuf));
@@ -745,8 +758,8 @@ user_esp_platform_upgrade_rsp(void *arg)
     } else {
         ESP_DBG("user_esp_platform_upgrade_failed\n");
         action = "device_upgrade_failed";
-        os_sprintf(pbuf, UPGRADE_FRAME, devkey, action);
-        ESP_DBG(pbuf);
+        os_sprintf(pbuf, UPGRADE_FRAME, devkey, action,server->pre_version, server->upgrade_version);
+        ESP_DBG("%s", pbuf);
 
 #ifdef CLIENT_SSL_ENABLE
         espconn_secure_sent(pespconn, pbuf, os_strlen(pbuf));
@@ -806,7 +819,7 @@ user_esp_platform_upgrade_begin(struct espconn *pespconn, struct upgrade_server_
     os_sprintf(server->url, "GET /v1/device/rom/?action=download_rom&version=%s&filename=%s HTTP/1.0\r\nHost: "IPSTR":%d\r\n"pheadbuffer"",
                server->upgrade_version, user_bin, IP2STR(server->ip),
                server->port, devkey);
-    ESP_DBG(server->url);
+    ESP_DBG("%s", server->url);
 
 #ifdef UPGRADE_SSL_ENABLE
 
@@ -841,7 +854,7 @@ user_esp_platform_recv_cb(void *arg, char *pusrdata, unsigned short length)
     os_timer_disarm(&beacon_timer);
 #endif
 
-    if (length == 1024) {
+    if (length == 1460) {
         os_memcpy(pbuffer, pusrdata, length);
     } else {
         struct espconn *pespconn = (struct espconn *)arg;
@@ -871,9 +884,10 @@ user_esp_platform_recv_cb(void *arg, char *pusrdata, unsigned short length)
                 user_platform_rpc_set_rsp(pespconn, nonce);
 
                 server = (struct upgrade_server_info *)os_zalloc(sizeof(struct upgrade_server_info));
-                os_memcpy(server->upgrade_version, pstr + 12, 4);
-                server->upgrade_version[4] = '\0';
-                os_sprintf(server->pre_version, "v%d.%d", SDK_VERSION_MAJOR, SDK_VERSION_MINOR);
+                os_memcpy(server->upgrade_version, pstr + 12, 16);
+                server->upgrade_version[15] = '\0';
+                os_sprintf(server->pre_version,"%s%d.%d.%dt%d(%s)",VERSION_TYPE,IOT_VERSION_MAJOR,\
+                    	IOT_VERSION_MINOR,IOT_VERSION_REVISION,device_type,UPGRADE_FALG);
                 user_esp_platform_upgrade_begin(pespconn, server);
             }
         } else if ((pstr = (char *)os_strstr(pbuffer, "\"action\": \"sys_reboot\"")) != NULL) {
@@ -942,17 +956,22 @@ LOCAL void ICACHE_FLASH_ATTR
 user_esp_platform_ap_change(void)
 {
     uint8 current_id;
-
+    uint8 i = 0;
     ESP_DBG("user_esp_platform_ap_is_changing\n");
-
 
     current_id = wifi_station_get_current_ap_id();
     ESP_DBG("current ap id =%d\n", current_id);
 
     if (current_id == AP_CACHE_NUMBER - 1) {
-        wifi_station_ap_change(0);
+       i = 0;
     } else {
-        wifi_station_ap_change(current_id + 1);
+       i = current_id + 1;
+    }
+    while (wifi_station_ap_change(i) != true) {
+       i++;
+       if (i == AP_CACHE_NUMBER - 1) {
+    	   i = 0;
+       }
     }
 
     /* just need to re-check ip while change AP */
@@ -1048,8 +1067,7 @@ user_esp_platform_connect_cb(void *arg)
     struct espconn *pespconn = arg;
 
     ESP_DBG("user_esp_platform_connect_cb\n");
-
-    if (wifi_get_opmode() ==  STATIONAP_MODE && esp_param.activeflag == 1) {
+    if (wifi_get_opmode() ==  STATIONAP_MODE ) {
         wifi_set_opmode(STATION_MODE);
     }
 
@@ -1242,7 +1260,39 @@ user_esp_platform_check_ip(uint8 reset_flag)
 void ICACHE_FLASH_ATTR
 user_esp_platform_init(void)
 {
+
+	os_sprintf(iot_version,"%s%d.%d.%dt%d(%s)",VERSION_TYPE,IOT_VERSION_MAJOR,\
+	IOT_VERSION_MINOR,IOT_VERSION_REVISION,device_type,UPGRADE_FALG);
+	os_printf("IOT VERSION = %s\n",iot_version);
+
     user_esp_platform_load_param(&esp_param);
+
+    system_rtc_mem_read(0,&rtc_info,sizeof(struct rst_info));
+     if(rtc_info.flag == 1 || rtc_info.flag == 2) {
+    	 ESP_DBG("flag = %d,epc1 = 0x%08x,epc2=0x%08x,epc3=0x%08x,excvaddr=0x%08x,depc=0x%08x,\nFatal \
+exception (%d): \n",rtc_info.flag,rtc_info.epc1,rtc_info.epc2,rtc_info.epc3,rtc_info.excvaddr,rtc_info.depc,rtc_info.exccause);
+     }
+    struct rst_info info = {0};
+    system_rtc_mem_write(0,&info,sizeof(struct rst_info));
+	/***add by tzx for saving ip_info to avoid dhcp_client start****/
+    struct dhcp_client_info dhcp_info;
+    struct ip_info sta_info;
+    system_rtc_mem_read(64,&dhcp_info,sizeof(struct dhcp_client_info));
+	if(dhcp_info.flag == 0x01 ) {
+		if (true == wifi_station_dhcpc_status())
+		{
+			wifi_station_dhcpc_stop();
+		}
+		sta_info.ip = dhcp_info.ip_addr;
+		sta_info.gw = dhcp_info.gw;
+		sta_info.netmask = dhcp_info.netmask;
+		if ( true != wifi_set_ip_info(STATION_IF,&sta_info)) {
+			os_printf("set default ip wrong\n");
+		}
+	}
+    os_memset(&dhcp_info,0,sizeof(struct dhcp_client_info));
+    system_rtc_mem_write(64,&dhcp_info,sizeof(struct rst_info));
+
 
 #if AP_CACHE
     wifi_station_ap_number_set(AP_CACHE_NUMBER);

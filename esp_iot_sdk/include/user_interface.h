@@ -22,35 +22,35 @@
 #define MACSTR "%02x:%02x:%02x:%02x:%02x:%02x"
 #endif
 
+enum rst_reason {
+	DEFAULT_RST_FLAG	= 0,
+	WDT_RST_FLAG	= 1,
+	EXP_RST_FLAG    = 2
+};
+
+struct rst_info{
+	uint32 flag;
+	uint32 exccause;
+	uint32 epc1;
+	uint32 epc2;
+	uint32 epc3;
+	uint32 excvaddr;
+	uint32 depc;
+};
+
 #define UPGRADE_FW_BIN1         0x00
 #define UPGRADE_FW_BIN2         0x01
 
-typedef void (*upgrade_states_check_callback)(void * arg);
-
-struct upgrade_server_info {
-    uint8 ip[4];
-    uint16 port;
-
-    uint8 upgrade_flag;
-
-    uint8 pre_version[8];
-    uint8 upgrade_version[8];
-
-    uint32 check_times;
-    uint8 *url;
-
-    upgrade_states_check_callback check_cb;
-    struct espconn *pespconn;
-};
-
-bool system_upgrade_start(struct upgrade_server_info *server);
-bool system_upgrade_start_ssl(struct upgrade_server_info *server);
-uint8 system_upgrade_userbin_check(void);
-void system_upgrade_reboot(void);
-
 void system_restore(void);
 void system_restart(void);
+
+bool system_deep_sleep_set_option(uint8 option);
 void system_deep_sleep(uint32 time_in_us);
+
+uint8 system_upgrade_userbin_check(void);
+void system_upgrade_reboot(void);
+uint8 system_upgrade_flag_check();
+void system_upgrade_flag_set(uint8 flag);
 
 void system_timer_reinit(void);
 uint32 system_get_time(void);
@@ -63,13 +63,14 @@ enum {
     USER_TASK_PRIO_MAX
 };
 
-void system_os_task(os_task_t task, uint8 prio, os_event_t *queue, uint8 qlen);
-void system_os_post(uint8 prio, os_signal_t sig, os_param_t par);
+bool system_os_task(os_task_t task, uint8 prio, os_event_t *queue, uint8 qlen);
+bool system_os_post(uint8 prio, os_signal_t sig, os_param_t par);
 
 void system_print_meminfo(void);
 uint32 system_get_free_heap_size(void);
 
 void system_set_os_print(uint8 onoff);
+uint8 system_get_os_print();
 
 uint64 system_mktime(uint32 year, uint32 mon, uint32 day, uint32 hour, uint32 min, uint32 sec);
 
@@ -79,10 +80,31 @@ typedef void (* init_done_cb_t)(void);
 
 void system_init_done_cb(init_done_cb_t cb);
 
+uint32 system_rtc_clock_cali_proc(void);
+uint32 system_get_rtc_time(void);
+
+bool system_rtc_mem_read(uint8 src_addr, void *des_addr, uint16 load_size);
+bool system_rtc_mem_write(uint8 des_addr, const void *src_addr, uint16 save_size);
+
+void system_uart_swap(void);
+
+uint16 system_adc_read(void);
+
+const char *system_get_sdk_version(void);
+
 #define NULL_MODE       0x00
 #define STATION_MODE    0x01
 #define SOFTAP_MODE     0x02
 #define STATIONAP_MODE  0x03
+
+typedef enum _auth_mode {
+    AUTH_OPEN           = 0,
+    AUTH_WEP,
+    AUTH_WPA_PSK,
+    AUTH_WPA2_PSK,
+    AUTH_WPA_WPA2_PSK,
+    AUTH_MAX
+} AUTH_MODE;
 
 uint8 wifi_get_opmode(void);
 bool wifi_set_opmode(uint8 opmode);
@@ -90,20 +112,21 @@ bool wifi_set_opmode(uint8 opmode);
 struct bss_info {
     STAILQ_ENTRY(bss_info)     next;
 
-    u8 bssid[6];
-    u8 ssid[32];
-    u8 channel;
-    s8 rssi;
-    u8 authmode;
+    uint8 bssid[6];
+    uint8 ssid[32];
+    uint8 channel;
+    sint8 rssi;
+    AUTH_MODE authmode;
+    uint8 is_hidden;
 };
 
 typedef struct _scaninfo {
     STAILQ_HEAD(, bss_info) *pbss;
     struct espconn *pespconn;
-    u8 totalpage;
-    u8 pagenum;
-    u8 page_sn;
-    u8 data_cnt;
+    uint8 totalpage;
+    uint8 pagenum;
+    uint8 page_sn;
+    uint8 data_cnt;
 } scaninfo;
 
 typedef void (* scan_done_cb_t)(void *arg, STATUS status);
@@ -111,6 +134,9 @@ typedef void (* scan_done_cb_t)(void *arg, STATUS status);
 struct station_config {
     uint8 ssid[32];
     uint8 password[64];
+    uint8 bssid_set;	// Note: If bssid_set is 1, station will just connect to the router
+                        // with both ssid[] and bssid[] matched. Please check about this.
+    uint8 bssid[6];
 };
 
 bool wifi_station_get_config(struct station_config *config);
@@ -120,9 +146,10 @@ bool wifi_station_connect(void);
 bool wifi_station_disconnect(void);
 
 struct scan_config {
-    uint8 *ssid;
-    uint8 *bssid;
-    uint8 channel;
+    uint8 *ssid;	// Note: ssid == NULL, don't filter ssid.
+    uint8 *bssid;	// Note: bssid == NULL, don't filter bssid.
+    uint8 channel;	// Note: channel == 0, scan all channels, otherwise scan set channel.
+    uint8 show_hidden;	// Note: show_hidden == 1, can get hidden ssid routers' info.
 };
 
 bool wifi_station_scan(struct scan_config *config, scan_done_cb_t cb);
@@ -139,23 +166,30 @@ enum {
     STATION_GOT_IP
 };
 
+enum dhcp_status {
+	DHCP_STOPPED,
+	DHCP_STARTED
+};
+
 uint8 wifi_station_get_connect_status(void);
 
-typedef enum _auth_mode {
-    AUTH_OPEN           = 0,
-    AUTH_WEP,
-    AUTH_WPA_PSK,
-    AUTH_WPA2_PSK,
-    AUTH_WPA_WPA2_PSK
-} AUTH_MODE;
+uint8 wifi_station_get_current_ap_id(void);
+bool wifi_station_ap_change(uint8 current_ap_id);
+bool wifi_station_ap_number_set(uint8 ap_number);
+
+bool wifi_station_dhcpc_start(void);
+bool wifi_station_dhcpc_stop(void);
+enum dhcp_status wifi_station_dhcpc_status(void);
 
 struct softap_config {
     uint8 ssid[32];
     uint8 password[64];
-    uint8 channel;
-    uint8 authmode;
-    uint8 ssid_hidden;
-    uint8 max_connection;
+    uint8 ssid_len;	// Note: Recommend to set it according to your ssid
+    uint8 channel;	// Note: support 1 ~ 13
+    AUTH_MODE authmode;	// Note: Don't support AUTH_WEP in softAP mode.
+    uint8 ssid_hidden;	// Note: default 0
+    uint8 max_connection;	// Note: default 4, max 4
+    uint8 beacon_interval;	// Note: support 100 ~ 60000 ms, default 100
 };
 
 bool wifi_softap_get_config(struct softap_config *config);
@@ -168,8 +202,19 @@ struct station_info {
 	struct ip_addr ip;
 };
 
+struct dhcps_lease {
+	uint32 start_ip;
+	uint32 end_ip;
+};
+
 struct station_info * wifi_softap_get_station_info(void);
 void wifi_softap_free_station_info(void);
+uint8 wifi_station_get_ap_info(struct station_config config[]);
+
+bool wifi_softap_dhcps_start(void);
+bool wifi_softap_dhcps_stop(void);
+bool wifi_softap_set_dhcps_lease(struct dhcps_lease *please);
+enum dhcp_status wifi_softap_dhcps_status(void);
 
 #define STATION_IF      0x00
 #define SOFTAP_IF       0x01
@@ -183,6 +228,7 @@ uint8 wifi_get_channel(void);
 bool wifi_set_channel(uint8 channel);
 
 void wifi_status_led_install(uint8 gpio_id, uint32 gpio_name, uint8 gpio_func);
+void wifi_status_led_uninstall();
 
 /** Get the absolute difference between 2 u32_t values (correcting overflows)
  * 'a' is expected to be 'higher' (without overflow) than 'b'. */
@@ -194,8 +240,22 @@ typedef void (* wifi_promiscuous_cb_t)(uint8 *buf, uint16 len);
 
 void wifi_set_promiscuous_rx_cb(wifi_promiscuous_cb_t cb);
 
-uint8 wifi_station_get_current_ap_id(void);
-bool wifi_station_ap_change(uint8 current_ap_id);
-bool wifi_station_ap_number_set(uint8 ap_number);
+enum phy_mode {
+	PHY_MODE_11B	= 1,
+	PHY_MODE_11G	= 2,
+	PHY_MODE_11N    = 3
+};
+
+enum phy_mode wifi_get_phy_mode(void);
+bool wifi_set_phy_mode(enum phy_mode mode);
+
+enum sleep_type {
+	NONE_SLEEP_T	= 0,
+	LIGHT_SLEEP_T,
+	MODEM_SLEEP_T
+};
+
+bool wifi_set_sleep_type(enum sleep_type type);
+enum sleep_type wifi_get_sleep_type(void);
 
 #endif

@@ -78,7 +78,7 @@ user_devicefind_recv(void *arg, char *pusrdata, unsigned short length)
         espconn_sent(&ptrespconn, DeviceBuffer, length);
     } else if (length == (os_strlen(device_find_request) + 18)) {
         os_sprintf(Device_mac_buffer, "%s " MACSTR , device_find_request, MAC2STR(hwaddr));
-        os_printf(Device_mac_buffer);
+        os_printf("%s", Device_mac_buffer);
 
         if (os_strncmp(Device_mac_buffer, pusrdata, os_strlen(device_find_request) + 18) == 0) {
             //os_printf("%s\n", Device_mac_buffer);

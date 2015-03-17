@@ -219,7 +219,7 @@ user_sensor_init(uint8 active)
 #ifdef SENSOR_DEEP_SLEEP
     if (wifi_get_opmode() != STATIONAP_MODE) {
         if (active == 1) {
-            user_sensor_deep_sleep_init(SENSOR_DEEP_SLEEP_TIME / 1000 / 3);
+            user_sensor_deep_sleep_init(SENSOR_DEEP_SLEEP_TIME / 1000 );
         } else {
             user_sensor_deep_sleep_init(SENSOR_DEEP_SLEEP_TIME / 1000 / 3 * 2);
         }

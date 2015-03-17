@@ -31,5 +31,11 @@ enum {
     DEVICE_ACTIVE_FAIL,
     DEVICE_CONNECT_SERVER_FAIL
 };
-
+struct dhcp_client_info {
+	ip_addr_t ip_addr;
+	ip_addr_t netmask;
+	ip_addr_t gw;
+	uint8 flag;
+	uint8 pad[3];
+};
 #endif

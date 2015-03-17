@@ -24,7 +24,8 @@ typedef enum _ParmType {
 	REBOOT,
     DEEP_SLEEP,
     LIGHT_STATUS,
-    CONNECT_STATUS
+    CONNECT_STATUS,
+    USER_BIN
 } ParmType;
 
 typedef struct URL_Frame {

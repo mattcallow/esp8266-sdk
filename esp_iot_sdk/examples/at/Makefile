@@ -22,13 +22,15 @@ GEN_IMAGES= eagle.app.v6.out
 GEN_BINS= eagle.app.v6.bin
 SPECIAL_MKTARGETS=$(APP_MKTARGETS)
 SUBDIRS=    \
-	user	\
-	driver
-
+	user
+ifdef AT_OPEN_SRC
+SUBDIRS +=    \
+	at
+endif
 endif # } PDIR
 
 APPDIR = .
-LDDIR = ../ld/
+LDDIR = ../ld
 
 CCFLAGS += -Os
 
@@ -46,15 +48,18 @@ ifeq ($(FLAVOR),release)
     TARGET_LDFLAGS += -g -O0
 endif
 
-
 COMPONENTS_eagle.app.v6 = \
-	user/libuser.a	\
-	driver/libdriver.a
+	user/libuser.a
+	
+ifdef AT_OPEN_SRC
+COMPONENTS_eagle.app.v6 += \
+	at/libat.a
+endif
 
 LINKFLAGS_eagle.app.v6 = \
 	-L../lib        \
 	-nostdlib	\
-    -T$(LDDIR)/eagle.app.v6.ld   \
+    -T$(LD_FILE)   \
 	-Wl,--no-check-sections	\
     -u call_user_start	\
 	-Wl,-static						\
@@ -63,17 +68,24 @@ LINKFLAGS_eagle.app.v6 = \
 	-lgcc					\
 	-lhal					\
 	-lphy	\
+	-lpp	\
 	-lnet80211	\
 	-llwip	\
 	-lwpa	\
 	-lmain	\
 	-ljson	\
 	-lupgrade\
-	$(DEP_LIBS_eagle.app.v6)					\
-	-Wl,--end-group
+	$(DEP_LIBS_eagle.app.v6)					
 
+ifndef AT_OPEN_SRC
+LINKFLAGS_eagle.app.v6 +=    \
+	-lat
+endif
+
+LINKFLAGS_eagle.app.v6 +=    \
+	-Wl,--end-group
 DEPENDS_eagle.app.v6 = \
-                $(LDDIR)/eagle.app.v6.ld \
+                $(LD_FILE) \
                 $(LDDIR)/eagle.rom.addr.v6.ld
 
 #############################################################
@@ -90,9 +102,11 @@ DEPENDS_eagle.app.v6 = \
 #	-DTXRX_TXBUF_DEBUG
 #	-DTXRX_RXBUF_DEBUG
 #	-DWLAN_CONFIG_CCX
-CONFIGURATION_DEFINES =	-D__ets__ \
-			-DICACHE_FLASH
-
+CONFIGURATION_DEFINES =	-DICACHE_FLASH
+ifdef AT_OPEN_SRC
+CONFIGURATION_DEFINES +=    \
+	-DAT_OPEN_SRC
+endif
 DEFINES +=				\
 	$(UNIVERSAL_TARGET_DEFINES)	\
 	$(CONFIGURATION_DEFINES)
@@ -115,18 +129,8 @@ DDEFINES +=				\
 #
 
 INCLUDES := $(INCLUDES) -I $(PDIR)include
-INCLUDES += -I ./
 PDIR := ../$(PDIR)
 sinclude $(PDIR)Makefile
-
-#########################################################################
-#
-#  generate bin file
-#
-
-$(BINODIR)/%.bin: $(IMAGEODIR)/%.out
-	@mkdir -p $(BINODIR)
-	$(OBJCOPY) -O binary $< $@
 
 .PHONY: FORCE
 FORCE:

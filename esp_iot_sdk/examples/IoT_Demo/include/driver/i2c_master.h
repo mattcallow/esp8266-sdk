@@ -50,4 +50,8 @@ uint8 i2c_master_getAck(void);
 uint8 i2c_master_readByte(void);
 void i2c_master_writeByte(uint8 wrdata);
 
+bool i2c_master_checkAck(void);
+void i2c_master_send_ack(void);
+void i2c_master_send_nack(void);
+
 #endif

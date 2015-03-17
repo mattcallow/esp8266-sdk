@@ -4,6 +4,8 @@
 #define ESP_PLATFORM        1
 #define LEWEI_PLATFORM      0
 
+#define USE_OPTIMIZE_PRINTF
+
 #if ESP_PLATFORM
 #define PLUG_DEVICE             0
 #define LIGHT_DEVICE            0

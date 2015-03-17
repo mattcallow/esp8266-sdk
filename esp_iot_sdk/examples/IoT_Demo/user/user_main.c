@@ -9,13 +9,12 @@
  *     2014/1/1, v1.0 create this file.
 *******************************************************************************/
 #include "ets_sys.h"
+#include "osapi.h"
 
 #include "user_interface.h"
 
 #include "user_devicefind.h"
 #include "user_webserver.h"
-
-#include "version.h"
 
 #if ESP_PLATFORM
 #include "user_esp_platform.h"
@@ -41,7 +40,7 @@ unsigned int default_private_key_len = 0;
 *******************************************************************************/
 void user_init(void)
 {
-    os_printf("SDK version:%d.%d.%d\n", SDK_VERSION_MAJOR, SDK_VERSION_MINOR, SDK_VERSION_REVISION);
+    os_printf("SDK version:%s\n", system_get_sdk_version());
 
 #if ESP_PLATFORM
     user_esp_platform_init();

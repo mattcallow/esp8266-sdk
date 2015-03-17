@@ -14,12 +14,12 @@
 #include "mem.h"
 #include "user_interface.h"
 
-#include "version.h"
-
+#include "user_iot_version.h"
 #include "espconn.h"
 #include "user_json.h"
 #include "user_webserver.h"
 
+#include "upgrade.h"
 #if ESP_PLATFORM
 #include "user_esp_platform.h"
 #endif
@@ -37,6 +37,10 @@ LOCAL struct softap_config *ap_conf;
 LOCAL scaninfo *pscaninfo;
 
 extern u16 scannum;
+
+uint8 upgrade_lock = 0;
+LOCAL os_timer_t app_upgrade_10s;
+LOCAL os_timer_t upgrade_check_timer;
 
 /******************************************************************************
  * FunctionName : device_get
@@ -72,7 +76,42 @@ device_get(struct jsontree_context *js_ctx)
 
 LOCAL struct jsontree_callback device_callback =
     JSONTREE_CALLBACK(device_get, NULL);
+/******************************************************************************
+ * FunctionName : userbin_get
+ * Description  : get up the user bin paramer as a JSON format
+ * Parameters   : js_ctx -- A pointer to a JSON set up
+ * Returns      : result
+*******************************************************************************/
+LOCAL int ICACHE_FLASH_ATTR
+userbin_get(struct jsontree_context *js_ctx)
+{
+    const char *path = jsontree_path_name(js_ctx, js_ctx->depth - 1);
+    char string[32];
 
+    if (os_strncmp(path, "status", 8) == 0) {
+        os_sprintf(string, "200");
+    } else if (os_strncmp(path, "user_bin", 8) == 0) {
+    	if (system_upgrade_userbin_check() == 0x00) {
+    		 os_sprintf(string, "user1.bin");
+    	} else if (system_upgrade_userbin_check() == 0x01) {
+    		 os_sprintf(string, "user2.bin");
+    	} else{
+    		return 0;
+    	}
+    }
+
+    jsontree_write_string(js_ctx, string);
+
+    return 0;
+}
+
+LOCAL struct jsontree_callback userbin_callback =
+    JSONTREE_CALLBACK(userbin_get, NULL);
+
+JSONTREE_OBJECT(userbin_tree,
+                JSONTREE_PAIR("status", &userbin_callback),
+                JSONTREE_PAIR("user_bin", &userbin_callback));
+JSONTREE_OBJECT(userinfo_tree,JSONTREE_PAIR("user_info",&userbin_tree));
 /******************************************************************************
  * FunctionName : version_get
  * Description  : set up the device version paramer as a JSON format
@@ -91,8 +130,11 @@ version_get(struct jsontree_context *js_ctx)
 #else
         os_sprintf(string, "0.1");
 #endif
-    } else if (os_strncmp(path, "software", 8) == 0) {
-        os_sprintf(string, "%d.%d.%d", SDK_VERSION_MAJOR, SDK_VERSION_MINOR, SDK_VERSION_REVISION);
+    } else if (os_strncmp(path, "sdk_version", 11) == 0) {
+        os_sprintf(string, "%s", system_get_sdk_version());
+    } else if (os_strncmp(path, "iot_version", 11) == 0) {
+    	os_sprintf(string,"%s%d.%d.%dt%d(%s)",VERSION_TYPE,IOT_VERSION_MAJOR,\
+    	IOT_VERSION_MINOR,IOT_VERSION_REVISION,device_type,UPGRADE_FALG);
     }
 
     jsontree_write_string(js_ctx, string);
@@ -108,7 +150,9 @@ JSONTREE_OBJECT(device_tree,
                 JSONTREE_PAIR("manufacturer", &device_callback));
 JSONTREE_OBJECT(version_tree,
                 JSONTREE_PAIR("hardware", &version_callback),
-                JSONTREE_PAIR("software", &version_callback));
+                JSONTREE_PAIR("sdk_version", &version_callback),
+                JSONTREE_PAIR("iot_version", &version_callback),
+                );
 JSONTREE_OBJECT(info_tree,
                 JSONTREE_PAIR("Version", &version_tree),
                 JSONTREE_PAIR("Device", &device_tree));
@@ -338,9 +382,7 @@ wifi_station_set(struct jsontree_context *js_ctx, struct jsonparse_state *parser
                     jsonparse_next(parser);
                     jsonparse_copy_value(parser, buffer, sizeof(buffer));
                     os_memcpy(sta_conf->ssid, buffer, os_strlen(buffer));
-                }
-
-                if (jsonparse_strcmp_value(parser, "password") == 0) {
+                } else if (jsonparse_strcmp_value(parser, "password") == 0) {
                     jsonparse_next(parser);
                     jsonparse_next(parser);
                     jsonparse_copy_value(parser, buffer, sizeof(buffer));
@@ -349,7 +391,7 @@ wifi_station_set(struct jsontree_context *js_ctx, struct jsonparse_state *parser
 
 #if ESP_PLATFORM
 
-                if (jsonparse_strcmp_value(parser, "token") == 0) {
+                else if (jsonparse_strcmp_value(parser, "token") == 0) {
                     jsonparse_next(parser);
                     jsonparse_next(parser);
                     jsonparse_copy_value(parser, buffer, sizeof(buffer));
@@ -502,16 +544,12 @@ wifi_softap_set(struct jsontree_context *js_ctx, struct jsonparse_state *parser)
                     jsonparse_next(parser);
                     jsonparse_next(parser);
                     ap_conf->channel = jsonparse_get_value_as_int(parser);
-                }
-
-                if (jsonparse_strcmp_value(parser, "ssid") == 0) {
+                } else if (jsonparse_strcmp_value(parser, "ssid") == 0) {
                     jsonparse_next(parser);
                     jsonparse_next(parser);
                     jsonparse_copy_value(parser, buffer, sizeof(buffer));
                     os_memcpy(ap_conf->ssid, buffer, os_strlen(buffer));
-                }
-
-                if (jsonparse_strcmp_value(parser, "password") == 0) {
+                } else if (jsonparse_strcmp_value(parser, "password") == 0) {
                     jsonparse_next(parser);
                     jsonparse_next(parser);
                     jsonparse_copy_value(parser, buffer, sizeof(buffer));
@@ -766,9 +804,13 @@ LOCAL bool save_data(char *precv, uint16 length)
         		return false;
         	}
         }
-
-        precvbuffer = (char *)os_zalloc(dat_sumlength + headlength + 1);
-        os_memcpy(precvbuffer, precv, os_strlen(precv));
+        if ((dat_sumlength + headlength) >= 1024) {
+        	precvbuffer = (char *)os_zalloc(headlength + 1);
+            os_memcpy(precvbuffer, precv, headlength + 1);
+        } else {
+        	precvbuffer = (char *)os_zalloc(dat_sumlength + headlength + 1);
+        	os_memcpy(precvbuffer, precv, os_strlen(precv));
+        }
     } else {
         if (precvbuffer != NULL) {
             totallength += length;
@@ -953,6 +995,9 @@ json_send(void *arg, ParmType ParmType)
             json_ws_send((struct jsontree_value *)&con_status_tree, "info", pbuf);
             break;
 
+        case USER_BIN:
+        	json_ws_send((struct jsontree_value *)&userinfo_tree, "user_info", pbuf);
+        	break;
         case SCAN: {
             u8 i = 0;
             u8 scancount = 0;
@@ -1081,6 +1126,101 @@ LOCAL void ICACHE_FLASH_ATTR json_scan_cb(void *arg, STATUS status)
     os_free(pbuf);
 }
 
+void ICACHE_FLASH_ATTR
+upgrade_check_func(void *arg)
+{
+	struct espconn *ptrespconn = arg;
+	os_timer_disarm(&upgrade_check_timer);
+	if(system_upgrade_flag_check() == UPGRADE_FLAG_START) {
+		response_send(ptrespconn, false);
+        system_upgrade_deinit();
+        system_upgrade_flag_set(UPGRADE_FLAG_IDLE);
+        upgrade_lock = 0;
+		os_printf("local upgrade failed\n");
+	} else if( system_upgrade_flag_check() == UPGRADE_FLAG_FINISH ) {
+		os_printf("local upgrade success\n");
+		response_send(ptrespconn, true);
+		upgrade_lock = 0;
+	} else {
+
+	}
+
+
+}
+/******************************************************************************
+ * FunctionName : upgrade_deinit
+ * Description  : disconnect the connection with the host
+ * Parameters   : bin -- server number
+ * Returns      : none
+*******************************************************************************/
+void ICACHE_FLASH_ATTR
+LOCAL local_upgrade_deinit(void)
+{
+    if (system_upgrade_flag_check() != UPGRADE_FLAG_START) {
+    	os_printf("system upgrade deinit\n");
+        system_upgrade_deinit();
+    }
+}
+
+
+/******************************************************************************
+ * FunctionName : upgrade_download
+ * Description  : Processing the upgrade data from the host
+ * Parameters   : bin -- server number
+ *                pusrdata -- The upgrade data (or NULL when the connection has been closed!)
+ *                length -- The length of upgrade data
+ * Returns      : none
+*******************************************************************************/
+LOCAL void
+local_upgrade_download(void * arg,char *pusrdata, unsigned short length)
+{
+    char *ptr = NULL;
+    char *ptmp2 = NULL;
+    char lengthbuffer[32];
+    static uint32 totallength = 0;
+    static uint32 sumlength = 0;
+    struct espconn *pespconn = arg;
+
+    if (totallength == 0 && (ptr = (char *)os_strstr(pusrdata, "\r\n\r\n")) != NULL &&
+            (ptr = (char *)os_strstr(pusrdata, "Content-Length")) != NULL) {
+        ptr = (char *)os_strstr(pusrdata, "\r\n\r\n");
+        length -= ptr - pusrdata;
+        length -= 4;
+        totallength += length;
+        os_printf("upgrade file download start.\n");
+        system_upgrade(ptr + 4, length);
+        ptr = (char *)os_strstr(pusrdata, "Content-Length: ");
+
+        if (ptr != NULL) {
+            ptr += 16;
+            ptmp2 = (char *)os_strstr(ptr, "\r\n");
+
+            if (ptmp2 != NULL) {
+                os_memset(lengthbuffer, 0, sizeof(lengthbuffer));
+                os_memcpy(lengthbuffer, ptr, ptmp2 - ptr);
+                sumlength = atoi(lengthbuffer);
+            } else {
+                os_printf("sumlength failed\n");
+            }
+        } else {
+            os_printf("Content-Length: failed\n");
+        }
+    } else {
+        totallength += length;
+        system_upgrade(pusrdata, length);
+    }
+
+    if (totallength == sumlength) {
+        os_printf("upgrade file download finished.\n");
+        system_upgrade_flag_set(UPGRADE_FLAG_FINISH);
+        totallength = 0;
+        sumlength = 0;
+        upgrade_check_func(pespconn);
+        os_timer_disarm(&app_upgrade_10s);
+        os_timer_setfn(&app_upgrade_10s, (os_timer_func_t *)local_upgrade_deinit, NULL);
+        os_timer_arm(&app_upgrade_10s, 10, 0);
+    }
+}
 
 /******************************************************************************
  * FunctionName : webserver_recv
@@ -1097,18 +1237,12 @@ webserver_recv(void *arg, char *pusrdata, unsigned short length)
     char *pParseBuffer = NULL;
     bool parse_flag = false;
     struct espconn *ptrespconn = arg;
-    parse_flag = save_data(pusrdata, length);
 
-    do {
+    if(upgrade_lock == 0){
+
+    	parse_flag = save_data(pusrdata, length);
         if (parse_flag == false) {
         	response_send(ptrespconn, false);
-        	if (dat_sumlength == 0){
-        		if (precvbuffer != NULL){
-        			os_free(precvbuffer);
-        			precvbuffer = NULL;
-        		}
-        	}
-            break;
         }
 
 //        os_printf(precvbuffer);
@@ -1195,7 +1329,12 @@ webserver_recv(void *arg, char *pusrdata, unsigned short length)
                     } else {
                         response_send(ptrespconn, false);
                     }
-                } else {
+                } else if (os_strcmp(pURL_Frame->pSelect, "upgrade") == 0 &&
+    					os_strcmp(pURL_Frame->pCommand, "command") == 0) {
+    					if (os_strcmp(pURL_Frame->pFilename, "getuser") == 0) {
+    						json_send(ptrespconn , USER_BIN);
+    					}
+    			} else {
                     response_send(ptrespconn, false);
                 }
 
@@ -1332,12 +1471,30 @@ webserver_recv(void *arg, char *pusrdata, unsigned short length)
                     else {
                         response_send(ptrespconn, false);
                     }
-                } else {
-                    response_send(ptrespconn, false);
                 }
+				else if(os_strcmp(pURL_Frame->pSelect, "upgrade") == 0 &&
+					    os_strcmp(pURL_Frame->pCommand, "command") == 0){
+					if (os_strcmp(pURL_Frame->pFilename, "start") == 0){
+						response_send(ptrespconn, true);
+						os_printf("local upgrade start\n");
+						upgrade_lock = 1;
+						system_upgrade_init();
+						system_upgrade_flag_set(UPGRADE_FLAG_START);
+						os_timer_disarm(&upgrade_check_timer);
+						os_timer_setfn(&upgrade_check_timer, (os_timer_func_t *)upgrade_check_func, NULL);
+						os_timer_arm(&upgrade_check_timer, 120000, 0);
+					} else if (os_strcmp(pURL_Frame->pFilename, "reset") == 0) {
 
-//	            os_free(pParseBuffer);
-                break;
+						response_send(ptrespconn, true);
+						os_printf("local upgrade restart\n");
+						system_upgrade_reboot();
+					} else {
+						response_send(ptrespconn, false);
+					}
+				}else {
+					response_send(ptrespconn, false);
+                }
+                 break;
         }
 
         if (precvbuffer != NULL){
@@ -1347,8 +1504,16 @@ webserver_recv(void *arg, char *pusrdata, unsigned short length)
         os_free(pURL_Frame);
         pURL_Frame = NULL;
 
-    } while (0);
-
+    }
+    else if(upgrade_lock == 1){
+    	local_upgrade_download(ptrespconn,pusrdata, length);
+		if (precvbuffer != NULL){
+			os_free(precvbuffer);
+			precvbuffer = NULL;
+		}
+		os_free(pURL_Frame);
+		pURL_Frame = NULL;
+    }
 }
 
 /******************************************************************************
