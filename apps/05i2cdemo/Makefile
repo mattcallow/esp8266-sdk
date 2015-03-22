@@ -18,17 +18,17 @@ FLAVOR = debug
 #EXTRA_CCFLAGS += -u
 
 ifndef PDIR # {
-GEN_IMAGES= eagle.app.v6.out
-GEN_BINS= eagle.app.v6.bin
-SPECIAL_MKTARGETS=$(APP_MKTARGETS)
+GEN_IMAGES=eagle.app.v6.img
+GEN_BINS= eagle.app.v6.bin 
+SPECIAL_MKTARGETS=$(APP_MKTARGETS) 
 SUBDIRS=    \
-	user	\
-	driver
+	driver \
+	user
 
 endif # } PDIR
 
 APPDIR = .
-LDDIR = ../ld/
+LDDIR = $(SDK_DIR)/ld
 
 CCFLAGS += -Os
 
@@ -46,35 +46,44 @@ ifeq ($(FLAVOR),release)
     TARGET_LDFLAGS += -g -O0
 endif
 
+LD_FILE = $(LDDIR)/eagle.app.v6.ld
+
+ifeq ($(APP), 1)
+	LD_FILE = $(LDDIR)/eagle.app.v6.app1.ld
+endif
+
+ifeq ($(APP), 2)
+	LD_FILE = $(LDDIR)/eagle.app.v6.app2.ld
+endif
 
 COMPONENTS_eagle.app.v6 = \
-	driver/libdriver.a	\
-	user/libuser.a	
+	driver/libdriver.a \
+	user/libuser.a 
 
 LINKFLAGS_eagle.app.v6 = \
-	-L../lib        \
+	-L$(SDK_DIR)/lib        \
+	-L$(SDK_LIB_DIR)/lib        \
+	-L$(EXTRA_LIB_DIR)/.output/lib        \
 	-nostdlib	\
-    -T$(LDDIR)/eagle.app.v6.ld   \
+    -T$(LD_FILE)   \
 	-Wl,--no-check-sections	\
     -u call_user_start	\
 	-Wl,-static						\
 	-Wl,--start-group					\
-	-lc					\
 	-lgcc					\
 	-lhal					\
 	-lphy	\
+	-lpp	\
 	-lnet80211	\
-	-llwip	\
 	-lwpa	\
 	-lmain	\
-	-ljson	\
-	-lupgrade\
+	-llwip \
 	$(DEP_LIBS_eagle.app.v6)					\
 	-Wl,--end-group
 
 DEPENDS_eagle.app.v6 = \
-                $(LDDIR)/eagle.app.v6.ld \
-                $(LDDIR)/eagle.rom.addr.v6.ld
+                $(LD_FILE) \
+                $(LDDIR)/eagle.rom.addr.v6.ld 
 
 #############################################################
 # Configuration i.e. compile options etc.
@@ -128,6 +137,25 @@ $(BINODIR)/%.bin: $(IMAGEODIR)/%.out
 	@mkdir -p $(BINODIR)
 	$(OBJCOPY) -O binary $< $@
 
-.PHONY: FORCE
+
+$(BINODIR)/$(TARGET).app.v6-0x00000.bin: $(IMAGEODIR)/$(TARGET).app.v6.out
+	@mkdir -p $(BINODIR)
+	$(ESPTOOL) elf2image --output $(BINODIR)/$(TARGET).app.v6-  $<
+
+$(BINODIR)/$(TARGET).app.v6-0x40000.bin: $(IMAGEODIR)/$(TARGET).app.v6.out
+	@mkdir -p $(BINODIR)
+	$(ESPTOOL) elf2image --output $(BINODIR)/$(TARGET).app.v6-  $<
+
+$(IMAGEODIR)/$(TARGET).app.v6.img: $(BINODIR)/$(TARGET).app.v6-0x00000.bin $(BINODIR)/$(TARGET).app.v6-0x40000.bin 
+	@mkdir -p $(IMAGEODIR)
+	$(ESPTOOL) make_image --segfile $(BINODIR)/$(TARGET).app.v6-0x00000.bin  --segaddr 0x00000 $@
+
+upload: $(BINODIR)/$(TARGET).app.v6-0x00000.bin $(BINODIR)/$(TARGET).app.v6-0x40000.bin 
+	$(ESPTOOL) --port $(PORT) write_flash  0x00000 $(BINODIR)/$(TARGET).app.v6-0x00000.bin  0x40000 $(BINODIR)/$(TARGET).app.v6-0x40000.bin 
+	
+	
+	
+
+.PHONY: FORCE upload
 FORCE:
 

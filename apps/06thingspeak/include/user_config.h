@@ -1,12 +1,12 @@
 #ifndef _USER_CONFIG_H_
 #define _USER_CONFIG_H_
 
-//#error Change WIFI_SSID and WIFI_PASSWORD to suit your network (and delete this line)
-#define WIFI_SSID "MS"
-#define WIFI_PASSWORD "peanut2010"
+#error Change WIFI_SSID and WIFI_PASSWORD to suit your network (and delete this line)
+#define WIFI_SSID "CHANGEME"
+#define WIFI_PASSWORD "CHANGEME"
 
-#define THINGSPEAK_API_KEY "EEIJEKNUQV3SPLHQ"
-#define THINGSPEAK_TALKBACK_KEY "MS9GDUIKKY5LE6IB"
+#define THINGSPEAK_API_KEY "CHANGEME"
+#define THINGSPEAK_TALKBACK_KEY "CHANGEME"
 
 #define LED_GPIO 2
 #define LED_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U

@@ -4,6 +4,12 @@ ifndef PDIR
 
 endif
 
+ROOT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+SDK_DIR := $(ROOT_DIR)/../esp_iot_sdk
+EXTRA_LIB_DIR := $(ROOT_DIR)/extra_lib
+ESPTOOL := $(ROOT_DIR)/../esptool/esptool.py
+PORT := /dev/ttyUSB0
+
 
 AR = xt-ar
 CC = xt-xcc
@@ -171,5 +177,6 @@ $(foreach image,$(GEN_IMAGES),$(eval $(call MakeImage,$(basename $(image)))))
 #
 
 INCLUDES := $(INCLUDES) -I $(PDIR)include -I $(PDIR)include/$(TARGET)
+INCLUDES += -I ./ -I $(SDK_DIR)/include -I $(SDK_DIR)/include/json 
 PDIR := ../$(PDIR)
 sinclude $(PDIR)Makefile
